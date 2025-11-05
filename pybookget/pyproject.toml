@@ -1,0 +1,71 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pybookget"
+version = "1.0.0"
+description = "A Python tool for downloading digital books from 50+ academic libraries"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "AGPL-3.0"}
+authors = [
+    {name = "Sebastian Majstorovic", email = "storytracer@gmail.com"},
+]
+keywords = ["books", "download", "iiif", "digital-library", "academic", "archives"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: GNU Affero General Public License v3",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
+]
+
+dependencies = [
+    "httpx>=0.25.0",
+    "click>=8.0.0",
+    "tqdm>=4.65.0",
+    "h2>=4.1.0",  # HTTP/2 support for httpx
+    "tenacity>=8.2.0",  # Retry management
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "mypy>=1.0.0",
+    "ruff>=0.1.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/storytracer/pybookget"
+Repository = "https://github.com/storytracer/pybookget"
+Issues = "https://github.com/storytracer/pybookget/issues"
+
+[project.scripts]
+pybookget = "pybookget.cli:main"
+
+[tool.setuptools]
+packages = ["pybookget", "pybookget.models", "pybookget.http", "pybookget.utils", "pybookget.router", "pybookget.handlers"]
+
+[tool.black]
+line-length = 100
+target-version = ['py38', 'py39', 'py310', 'py311']
+
+[tool.ruff]
+line-length = 100
+target-version = "py38"
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
