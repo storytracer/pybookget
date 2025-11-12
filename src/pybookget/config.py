@@ -33,6 +33,7 @@ class Config:
 
     # HTTP settings
     timeout: int = 300  # seconds
+    use_fake_user_agent: bool = True  # Use random user agents for masking
     user_agent: str = (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
         "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"

@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Dict, Optional
 
 import httpx
+from fake_useragent import UserAgent
 from tenacity import (
     retry,
     stop_after_attempt,
@@ -38,8 +39,16 @@ def create_client(config: Config) -> httpx.AsyncClient:
         >>> async with create_client(config) as client:
         ...     response = await client.get(url)
     """
-    # Build headers
-    headers = {'User-Agent': config.user_agent}
+    # Build headers with user agent
+    if config.use_fake_user_agent:
+        # Generate random user agent for request masking
+        ua = UserAgent()
+        user_agent = ua.random
+    else:
+        # Use static user agent from config
+        user_agent = config.user_agent
+
+    headers = {'User-Agent': user_agent}
 
     # Load additional headers from file
     if config.header_file and Path(config.header_file).exists():
@@ -54,6 +63,7 @@ def create_client(config: Config) -> httpx.AsyncClient:
             cookies[cookie.name] = cookie.value
 
     # Create async client with configuration
+    # Disable connection pooling to ensure new connections for each request
     return httpx.AsyncClient(
         headers=headers,
         cookies=cookies,
@@ -62,6 +72,7 @@ def create_client(config: Config) -> httpx.AsyncClient:
         follow_redirects=True,
         http2=True,
         proxy=config.proxy,
+        limits=httpx.Limits(max_keepalive_connections=0),
     )
 
 

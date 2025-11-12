@@ -57,6 +57,7 @@ def cli(ctx, version):
 @click.option('--header-file', help='Path to header file')
 @click.option('--proxy', help='HTTP/HTTPS proxy')
 @click.option('--user-agent', '-U', help='Custom user agent')
+@click.option('--no-fake-user-agent', is_flag=True, help='Disable random user agent masking')
 @click.option('--no-ssl-verify', is_flag=True, help='Disable SSL verification')
 @click.option('--quality', default=80, help='JPEG quality (1-100)')
 @click.option('--iiif-quality', default='default', help='IIIF quality: default, color, gray, bitonal')
@@ -78,6 +79,7 @@ def download(
     header_file: Optional[str],
     proxy: Optional[str],
     user_agent: Optional[str],
+    no_fake_user_agent: bool,
     no_ssl_verify: bool,
     quality: int,
     iiif_quality: str,
@@ -109,6 +111,7 @@ def download(
         cookie_file=cookie_file,
         header_file=header_file,
         proxy=proxy,
+        use_fake_user_agent=not no_fake_user_agent,
         verify_ssl=not no_ssl_verify,
         quality=quality,
         iiif_quality=iiif_quality,
@@ -117,6 +120,7 @@ def download(
 
     if user_agent:
         config.user_agent = user_agent
+        config.use_fake_user_agent = False  # Disable fake UA if custom UA provided
 
     # Execute download
     click.echo(f"Handler: {handler}")

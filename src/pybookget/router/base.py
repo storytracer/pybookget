@@ -101,8 +101,13 @@ class BaseHandler(ABC):
         The slug is deterministic, reversible, and works universally
         with any IIIF manifest URL.
 
+        Creates three subdirectories:
+        - images/: For downloaded image files
+        - metadata/: For manifest.json and other metadata
+        - ocr/: For OCR text files (created but initially empty)
+
         Returns:
-            Path object for save directory
+            Path object for base save directory
         """
         domain = get_domain(self.url)
 
@@ -114,7 +119,36 @@ class BaseHandler(ABC):
         save_dir = Path(self.config.download_dir) / domain / url_slug
         save_dir.mkdir(parents=True, exist_ok=True)
 
+        # Create subdirectories
+        (save_dir / "images").mkdir(exist_ok=True)
+        (save_dir / "metadata").mkdir(exist_ok=True)
+        (save_dir / "ocr").mkdir(exist_ok=True)
+
         return save_dir
+
+    def get_images_dir(self) -> Path:
+        """Get the images subdirectory.
+
+        Returns:
+            Path object for images directory
+        """
+        return self.get_save_dir() / "images"
+
+    def get_metadata_dir(self) -> Path:
+        """Get the metadata subdirectory.
+
+        Returns:
+            Path object for metadata directory
+        """
+        return self.get_save_dir() / "metadata"
+
+    def get_ocr_dir(self) -> Path:
+        """Get the OCR subdirectory.
+
+        Returns:
+            Path object for OCR directory
+        """
+        return self.get_save_dir() / "ocr"
 
     def create_download_tasks(
         self,
@@ -127,7 +161,7 @@ class BaseHandler(ABC):
 
         Args:
             image_urls: List of image URLs to download
-            save_dir: Directory to save files (defaults to self.get_save_dir())
+            save_dir: Directory to save files (defaults to images/ subdirectory)
             extension: File extension (defaults to config.file_ext)
             start_index: Starting index for filenames
 
@@ -135,7 +169,7 @@ class BaseHandler(ABC):
             List of DownloadTask objects
         """
         if save_dir is None:
-            save_dir = self.get_save_dir()
+            save_dir = self.get_images_dir()
 
         if extension is None:
             extension = self.config.file_ext
@@ -172,7 +206,7 @@ class BaseHandler(ABC):
 
         Args:
             image_urls: List of image URLs to download
-            save_dir: Directory to save files
+            save_dir: Directory to save files (defaults to images/ subdirectory)
             extension: File extension
             start_index: Starting index for filenames
 

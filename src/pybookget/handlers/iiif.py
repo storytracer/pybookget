@@ -3,6 +3,7 @@
 This handler supports any IIIF-compliant manifest (v2 or v3).
 """
 
+import json
 import logging
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -48,6 +49,9 @@ class IIIFHandler(BaseHandler):
             logger.info(f"Book: {self.title} (ID: {self.book_id})")
             logger.info(f"Total pages: {len(manifest.canvases)}")
 
+            # Save manifest.json to metadata directory
+            await self._save_manifest(manifest_data)
+
             # Extract image URLs from canvases (with fallbacks)
             image_url_pairs = self._extract_image_urls(manifest.canvases)
 
@@ -55,9 +59,9 @@ class IIIFHandler(BaseHandler):
                 logger.warning("No images found in manifest")
                 return self._create_result(0, 0)
 
-            # Download images
-            save_dir = self.get_save_dir()
-            downloaded = await self._download_images_with_fallback(image_url_pairs, save_dir)
+            # Download images to images/ subdirectory
+            images_dir = self.get_images_dir()
+            downloaded = await self._download_images_with_fallback(image_url_pairs, images_dir)
 
             logger.info(f"Download complete: {downloaded}/{len(image_url_pairs)} images")
 
@@ -93,6 +97,23 @@ class IIIFHandler(BaseHandler):
                 return label
 
         return 'unknown'
+
+    async def _save_manifest(self, manifest_data: dict) -> None:
+        """Save manifest.json to metadata directory.
+
+        Args:
+            manifest_data: Raw manifest data as dictionary
+        """
+        metadata_dir = self.get_metadata_dir()
+        manifest_path = metadata_dir / "manifest.json"
+
+        try:
+            # Write manifest with pretty formatting
+            with open(manifest_path, 'w', encoding='utf-8') as f:
+                json.dump(manifest_data, f, indent=2, ensure_ascii=False)
+            logger.info(f"Saved manifest to {manifest_path}")
+        except Exception as e:
+            logger.error(f"Failed to save manifest: {e}")
 
     def _extract_image_urls(self, canvases: List[IIIFCanvas]) -> List[tuple]:
         """Extract image URLs from IIIF canvases with fallback URLs.
