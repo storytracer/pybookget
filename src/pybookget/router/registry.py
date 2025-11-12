@@ -69,6 +69,7 @@ class HandlerRegistry:
         try:
             # Import all handler modules to trigger their registration
             from pybookget.handlers import (
+                erara,
                 iiif,
                 # Additional site-specific handlers can be imported here
             )
