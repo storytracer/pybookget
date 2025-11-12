@@ -103,9 +103,9 @@ class ERaraHandler(LibraryHandler):
         """Save e-rara metadata files to disk.
 
         Saves:
-        - manifest.json (IIIF manifest)
-        - mets.xml (METS metadata)
-        - book_info.json (combined metadata)
+        - manifest.json (IIIF manifest - library specific)
+        - mets.xml (METS metadata - library specific)
+        - ro-crate-metadata.json (RO-Crate metadata - standard format)
 
         Args:
             iiif_data: IIIF manifest as dictionary
@@ -115,36 +115,21 @@ class ERaraHandler(LibraryHandler):
         metadata_dir = self.get_metadata_dir()
 
         try:
-            # Save IIIF manifest
+            # Save IIIF manifest (library-specific format)
             manifest_path = metadata_dir / "manifest.json"
             with open(manifest_path, 'w', encoding='utf-8') as f:
                 json.dump(iiif_data, f, indent=2, ensure_ascii=False)
             logger.info(f"Saved IIIF manifest to {manifest_path}")
 
-            # Save METS
+            # Save METS (library-specific format)
             mets_path = metadata_dir / "mets.xml"
             with open(mets_path, 'w', encoding='utf-8') as f:
                 f.write(mets_data)
             logger.info(f"Saved METS to {mets_path}")
 
-            # Save combined book info with e-rara specific fields
-            book_info_path = metadata_dir / "book_info.json"
-            book_info = {
-                "book_id": book.book_id,
-                "title": book.metadata.title,
-                "subtitle": book.metadata.subtitle,
-                "author": book.metadata.author,
-                "publisher": book.metadata.publisher,
-                "date": book.metadata.date,
-                "language": book.metadata.language,
-                "doi": book.doi,
-                "license": book.metadata.license,
-                "extent": book.metadata.extent if hasattr(book.metadata, 'extent') else None,
-                "total_pages": book.total_pages,
-            }
-            with open(book_info_path, 'w', encoding='utf-8') as f:
-                json.dump(book_info, f, indent=2, ensure_ascii=False)
-            logger.info(f"Saved book info to {book_info_path}")
+            # Call parent method to create RO-Crate metadata
+            # This creates ro-crate-metadata.json with Dublin Core metadata
+            await super().save_metadata_files()
 
         except Exception as e:
             logger.error(f"Failed to save metadata files: {e}")

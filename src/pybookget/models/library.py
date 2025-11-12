@@ -4,34 +4,57 @@ Base models for library-specific handlers.
 This module provides generic base classes for library handlers that support
 metadata, OCR, and image downloads. These models can be extended by specific
 library implementations (e-rara, Gallica, Internet Archive, etc.).
+
+Metadata follows Dublin Core standard with required fields: creator, title, date.
 """
 
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Optional, List
 
 
 @dataclass
 class LibraryMetadata:
-    """Base class for library book metadata.
+    """Base class for library book metadata following Dublin Core standard.
 
-    Attributes:
-        title: Book title (required)
-        subtitle: Book subtitle (optional)
-        author: Author name(s) (optional)
+    Required fields (Dublin Core):
+        creator: Creator(s) of the resource (author, artist, etc.)
+        title: Title of the resource
+        date: Date of publication or creation
+
+    Optional fields (Dublin Core):
+        contributor: Additional contributors (optional)
         publisher: Publisher name (optional)
-        date: Publication date (optional)
-        language: Language code or name (optional)
-        license: License information (optional)
+        type: Resource type (optional, e.g., "Book", "Manuscript")
+        format: Media type or format (optional)
+        identifier: Unique identifier (DOI, ISBN, etc.) (optional)
+        source: Related resource from which this is derived (optional)
+        language: Language code (ISO 639) (optional)
+        relation: Related resource (optional)
+        coverage: Spatial or temporal coverage (optional)
+        rights: License or rights statement (optional)
+        description: Description or abstract (optional)
+        subject: Subject/keywords (optional)
 
     Subclasses can add additional metadata fields specific to their library.
     """
-    title: str
-    subtitle: Optional[str] = None
-    author: Optional[str] = None
-    publisher: Optional[str] = None
-    date: Optional[str] = None
-    language: Optional[str] = None
-    license: Optional[str] = None
+    # Required fields (Dublin Core)
+    creator: str  # dc:creator (author, artist, etc.)
+    title: str    # dc:title
+    date: str     # dc:date (publication date)
+
+    # Optional fields (Dublin Core)
+    contributor: Optional[str] = None      # dc:contributor
+    publisher: Optional[str] = None        # dc:publisher
+    type: Optional[str] = None             # dc:type
+    format: Optional[str] = None           # dc:format
+    identifier: Optional[str] = None       # dc:identifier
+    source: Optional[str] = None           # dc:source
+    language: Optional[str] = None         # dc:language
+    relation: Optional[str] = None         # dc:relation
+    coverage: Optional[str] = None         # dc:coverage
+    rights: Optional[str] = None           # dc:rights (license)
+    description: Optional[str] = None      # dc:description
+    subject: Optional[List[str]] = None    # dc:subject
 
 
 @dataclass

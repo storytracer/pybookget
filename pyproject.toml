@@ -37,6 +37,7 @@ dependencies = [
     "url64>=0.1.0",  # URL-safe base64 encoding
     "tldextract>=5.0.0",  # Extract root domain from URLs
     "fake-useragent>=1.4.0",  # Random user agent generation
+    "rocrate>=0.9.0",  # RO-Crate metadata serialization
 ]
 
 [project.optional-dependencies]

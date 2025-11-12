@@ -18,12 +18,15 @@ from pybookget.models.mets import METSDocument
 class ERaraMetadata(LibraryMetadata):
     """e-rara specific metadata extending base LibraryMetadata.
 
-    Additional fields:
-        doi: Digital Object Identifier
-        extent: Physical extent information
+    Inherits Dublin Core required fields: creator, title, date
+    Inherits Dublin Core optional fields from LibraryMetadata
+
+    Additional e-rara specific fields:
+        extent: Physical extent information (e.g., "265 p.")
+
+    Note: DOI is stored in the identifier field (Dublin Core dc:identifier)
     """
-    doi: Optional[str] = None
-    extent: Optional[str] = None
+    extent: Optional[str] = None  # Physical description
 
 
 @dataclass
@@ -55,28 +58,23 @@ class ERaraBook(LibraryBook):
     # Backwards compatibility properties
     @property
     def doi(self) -> Optional[str]:
-        """Convenience property for DOI."""
-        return self.metadata.doi if isinstance(self.metadata, ERaraMetadata) else None
-
-    @property
-    def subtitle(self) -> Optional[str]:
-        """Convenience property for subtitle."""
-        return self.metadata.subtitle
+        """Convenience property for DOI (stored in identifier field)."""
+        return self.metadata.identifier
 
     @property
     def author(self) -> Optional[str]:
-        """Convenience property for author."""
-        return self.metadata.author
+        """Convenience property for author (Dublin Core creator)."""
+        return self.metadata.creator
+
+    @property
+    def date(self) -> str:
+        """Convenience property for date."""
+        return self.metadata.date
 
     @property
     def publisher(self) -> Optional[str]:
         """Convenience property for publisher."""
         return self.metadata.publisher
-
-    @property
-    def date(self) -> Optional[str]:
-        """Convenience property for date."""
-        return self.metadata.date
 
     @property
     def language(self) -> Optional[str]:
@@ -85,8 +83,13 @@ class ERaraBook(LibraryBook):
 
     @property
     def license(self) -> Optional[str]:
-        """Convenience property for license."""
-        return self.metadata.license
+        """Convenience property for license (Dublin Core rights)."""
+        return self.metadata.rights
+
+    @property
+    def subtitle(self) -> Optional[str]:
+        """Convenience property for subtitle (stored in description)."""
+        return self.metadata.description
 
 
 def create_erara_book_from_mets(book_id: str, mets_doc: METSDocument) -> ERaraBook:
@@ -98,20 +101,27 @@ def create_erara_book_from_mets(book_id: str, mets_doc: METSDocument) -> ERaraBo
         mets_doc: Parsed METS document
 
     Returns:
-        ERaraBook with metadata and page structure
+        ERaraBook with metadata and page structure following Dublin Core
     """
     mets_metadata = mets_doc.metadata
 
-    # Create ERaraMetadata from METS metadata
+    # Create ERaraMetadata from METS metadata following Dublin Core
+    # Required fields: creator, title, date
     metadata = ERaraMetadata(
-        title=mets_metadata.title or f"Book {book_id}",
-        subtitle=mets_metadata.subtitle,
-        author=mets_metadata.author,
-        publisher=mets_metadata.publisher,
-        date=mets_metadata.date,
-        language=mets_metadata.language,
-        license=mets_metadata.license,
-        doi=mets_metadata.doi,
+        # Required Dublin Core fields
+        creator=mets_metadata.author or "Unknown",  # dc:creator (required)
+        title=mets_metadata.title or f"Book {book_id}",  # dc:title (required)
+        date=mets_metadata.date or "Unknown",  # dc:date (required)
+
+        # Optional Dublin Core fields
+        publisher=mets_metadata.publisher,  # dc:publisher
+        identifier=mets_metadata.doi,  # dc:identifier (DOI)
+        language=mets_metadata.language,  # dc:language
+        rights=mets_metadata.license,  # dc:rights (license)
+        description=mets_metadata.subtitle,  # dc:description (subtitle)
+        type="Book",  # dc:type
+
+        # e-rara specific
         extent=mets_metadata.extent,
     )
 
