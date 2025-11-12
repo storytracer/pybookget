@@ -508,7 +508,7 @@ This is a Python rewrite of the original [bookget](https://github.com/deweizhu/b
 
 ## License
 
-AGPL-3.0 License - see LICENSE file for details.
+GPL-3.0 License - see LICENSE file for details.
 
 ## Contributing
 

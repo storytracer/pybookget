@@ -82,7 +82,7 @@ black src/pybookget/
 pybookget/                 # Git repository root
 ├── README.md              # Comprehensive documentation
 ├── CLAUDE.md              # This file
-├── LICENSE                # AGPL-3.0
+├── LICENSE                # GPL-3.0
 ├── pyproject.toml         # Package configuration
 ├── requirements.txt       # Direct dependencies list
 └── src/                   # Source code (src layout)
