@@ -13,9 +13,10 @@ from pybookget.config import Config
 from pybookget.router.registry import download_from_url, HandlerRegistry
 
 
-# Setup logging
+# Setup logging - default to WARNING to avoid interfering with progress bars
+# INFO and DEBUG logs are only shown when --verbose is used
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.WARNING,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
@@ -90,8 +91,11 @@ def download(
     Example:
         pybookget download "https://iiif.lib.harvard.edu/manifests/..." -o ./books
     """
+    # Enable verbose logging if requested
     if verbose:
-        logging.getLogger().setLevel(logging.DEBUG)
+        logging.getLogger().setLevel(logging.INFO)
+        # Also enable httpx logging
+        logging.getLogger('httpx').setLevel(logging.INFO)
 
     # Create configuration
     config = Config(
@@ -157,8 +161,11 @@ def batch(
     Example:
         pybookget batch urls.txt -o ./books -c 4
     """
+    # Enable verbose logging if requested
     if verbose:
-        logging.getLogger().setLevel(logging.DEBUG)
+        logging.getLogger().setLevel(logging.INFO)
+        # Also enable httpx logging
+        logging.getLogger('httpx').setLevel(logging.INFO)
 
     # Read URLs from file
     urls = []

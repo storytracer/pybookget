@@ -61,7 +61,7 @@ def create_client(config: Config) -> httpx.AsyncClient:
         verify=config.verify_ssl,
         follow_redirects=True,
         http2=True,
-        proxies=config.proxy,
+        proxy=config.proxy,
     )
 
 

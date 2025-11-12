@@ -10,8 +10,7 @@ import httpx
 from pybookget.config import Config
 from pybookget.http.client import create_client
 from pybookget.http.download import DownloadManager, DownloadTask
-from pybookget.utils.file import sanitize_filename
-from pybookget.utils.text import extract_id_from_url, get_domain
+from pybookget.utils.text import extract_id_from_url, get_domain, url_to_slug
 
 logger = logging.getLogger(__name__)
 
@@ -98,15 +97,21 @@ class BaseHandler(ABC):
     def get_save_dir(self) -> Path:
         """Get the save directory for this book.
 
+        Uses base64-encoded URL slug as the directory name.
+        The slug is deterministic, reversible, and works universally
+        with any IIIF manifest URL.
+
         Returns:
             Path object for save directory
         """
         domain = get_domain(self.url)
-        safe_title = sanitize_filename(self.title)
-        safe_book_id = sanitize_filename(self.book_id or "unknown")
 
-        # Create directory structure: downloads/domain/book_id_title/
-        save_dir = Path(self.config.download_dir) / domain / f"{safe_book_id}_{safe_title}"
+        # Create reversible slug from URL (base64url-encoded)
+        url_slug = url_to_slug(self.url)
+
+        # Create directory structure: downloads/domain/slug/
+        # Format: downloads/www.loc.gov/aHR0cHM6Ly93d3cubG9jLmdvdi9pdGVtL2x0ZjkwMDA3NTQ3L21hbmlmZXN0Lmpzb24/
+        save_dir = Path(self.config.download_dir) / domain / url_slug
         save_dir.mkdir(parents=True, exist_ok=True)
 
         return save_dir

@@ -1,6 +1,5 @@
 """File operation utilities."""
 
-import re
 from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse
@@ -17,33 +16,6 @@ def ensure_dir(path: Path) -> Path:
     """
     path.mkdir(parents=True, exist_ok=True)
     return path
-
-
-def sanitize_filename(filename: str, replacement: str = "_") -> str:
-    """Sanitize filename by removing/replacing invalid characters.
-
-    Args:
-        filename: Original filename
-        replacement: Character to use for replacing invalid chars
-
-    Returns:
-        Sanitized filename safe for filesystem use
-    """
-    # Remove or replace characters not allowed in filenames
-    # Different OS have different restrictions, so we use a conservative approach
-    invalid_chars = r'[<>:"/\\|?*\x00-\x1f]'
-    sanitized = re.sub(invalid_chars, replacement, filename)
-
-    # Remove leading/trailing spaces and dots
-    sanitized = sanitized.strip('. ')
-
-    # Limit length to 255 characters (common filesystem limit)
-    if len(sanitized) > 255:
-        name, ext = Path(sanitized).stem, Path(sanitized).suffix
-        max_name_len = 255 - len(ext)
-        sanitized = name[:max_name_len] + ext
-
-    return sanitized or "unnamed"
 
 
 def get_file_extension(url_or_path: str, default: str = ".jpg") -> str:

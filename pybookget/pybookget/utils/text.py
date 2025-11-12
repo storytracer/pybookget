@@ -1,5 +1,7 @@
 """Text and URL parsing utilities."""
 
+import base64
+import hashlib
 import re
 from typing import Optional, Tuple
 from urllib.parse import urlparse
@@ -134,3 +136,55 @@ def parse_range_string(range_str: str) -> Tuple[int, int]:
         return (start, end)
     except ValueError:
         raise ValueError(f"Invalid range values: {range_str}")
+
+
+def url_to_slug(url: str) -> str:
+    """Convert URL to a reversible, filesystem-safe slug.
+
+    Uses Python's standard base64.urlsafe_b64encode for reliable encoding.
+
+    Args:
+        url: URL to convert (UTF-8)
+
+    Returns:
+        Base64url-encoded slug (no padding)
+
+    Raises:
+        ValueError: If URL cannot be encoded
+
+    Examples:
+        >>> url_to_slug("https://example.org/manifest.json")
+        'aHR0cHM6Ly9leGFtcGxlLm9yZy9tYW5pZmVzdC5qc29u'
+    """
+    try:
+        encoded = base64.urlsafe_b64encode(url.encode('utf-8'))
+        return encoded.decode('ascii').rstrip('=')
+    except Exception as e:
+        raise ValueError(f"Failed to encode URL to slug: {e}")
+
+
+def slug_to_url(slug: str) -> str:
+    """Decode a base64url slug back to the original URL.
+
+    Uses Python's standard base64.urlsafe_b64decode for reliable decoding.
+
+    Args:
+        slug: Base64url-encoded slug
+
+    Returns:
+        Original URL (UTF-8)
+
+    Raises:
+        ValueError: If slug cannot be decoded
+
+    Examples:
+        >>> slug_to_url('aHR0cHM6Ly9leGFtcGxlLm9yZy9tYW5pZmVzdC5qc29u')
+        'https://example.org/manifest.json'
+    """
+    try:
+        # Restore padding (base64 requires length to be multiple of 4)
+        padded_slug = slug + '=' * ((4 - len(slug) % 4) % 4)
+        decoded = base64.urlsafe_b64decode(padded_slug.encode('ascii'))
+        return decoded.decode('utf-8')
+    except Exception as e:
+        raise ValueError(f"Failed to decode slug to URL: {e}")
