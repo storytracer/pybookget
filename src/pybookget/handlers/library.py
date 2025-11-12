@@ -16,11 +16,8 @@ from abc import abstractmethod
 from pathlib import Path
 from typing import Dict, Optional
 
-from rocrate.rocrate import ROCrate
-from rocrate.model.person import Person
-from rocrate.model.contextentity import ContextEntity
-
 from pybookget.config import Config
+from pybookget.formats.rocrate import ROCrateWriter
 from pybookget.http.download import DownloadManager, DownloadTask
 from pybookget.models.library import LibraryBook, LibraryPage
 from pybookget.router.base import BaseHandler
@@ -162,10 +159,8 @@ class LibraryHandler(BaseHandler):
         It creates an RO-Crate metadata file following the Dublin Core standard,
         including hasPart relationships to all downloaded images and OCR files.
 
-        The RO-Crate includes:
-        - Root dataset with book metadata (Dublin Core)
-        - hasPart references to images and OCR files
-        - Person entities for creators
+        Uses the ROCrateWriter from the formats module for standardized
+        RO-Crate generation.
 
         Args:
             **kwargs: Library-specific metadata to save
@@ -175,107 +170,22 @@ class LibraryHandler(BaseHandler):
             return
 
         save_dir = self.get_save_dir()
-        metadata_dir = self.get_metadata_dir()
+        images_dir = self.get_images_dir()
+        ocr_dir = self.get_ocr_dir()
 
         try:
-            # Create RO-Crate
-            crate = ROCrate()
-
-            # Set root dataset metadata (the book itself)
-            root = crate.root_dataset
-            metadata = self.library_book.metadata
-
-            # Required Dublin Core fields
-            root["name"] = metadata.title  # dc:title
-            root["datePublished"] = metadata.date  # dc:date
-
-            # Creator (dc:creator) - create Person entity
-            creator = Person(crate, identifier=f"#{metadata.creator.replace(' ', '_')}")
-            creator["name"] = metadata.creator
-            crate.add(creator)
-            root["creator"] = creator
-
-            # Optional Dublin Core fields
-            if metadata.contributor:
-                contributor = Person(crate, identifier=f"#{metadata.contributor.replace(' ', '_')}_contributor")
-                contributor["name"] = metadata.contributor
-                crate.add(contributor)
-                root["contributor"] = contributor
-
-            if metadata.publisher:
-                publisher = ContextEntity(
-                    crate,
-                    identifier=f"#{metadata.publisher.replace(' ', '_')}",
-                    properties={
-                        "@type": "Organization",
-                        "name": metadata.publisher
-                    }
-                )
-                crate.add(publisher)
-                root["publisher"] = publisher
-
-            if metadata.type:
-                root["additionalType"] = metadata.type  # dc:type -> Schema.org additionalType
-
-            if metadata.format:
-                root["encodingFormat"] = metadata.format  # dc:format
-
-            if metadata.identifier:
-                root["identifier"] = metadata.identifier  # dc:identifier
-
-            if metadata.source:
-                root["isBasedOn"] = metadata.source  # dc:source
-
-            if metadata.language:
-                root["inLanguage"] = metadata.language  # dc:language
-
-            if metadata.relation:
-                root["relatedLink"] = metadata.relation  # dc:relation
-
-            if metadata.coverage:
-                root["spatialCoverage"] = metadata.coverage  # dc:coverage
-
-            if metadata.rights:
-                root["license"] = metadata.rights  # dc:rights
-
-            if metadata.description:
-                root["description"] = metadata.description  # dc:description
-
-            if metadata.subject:
-                root["keywords"] = metadata.subject  # dc:subject
-
-            # Add book-specific metadata
-            root["numberOfPages"] = self.library_book.total_pages
-            root["bookId"] = self.library_book.book_id
-
-            # Add hasPart relationships to images and OCR files
-            parts = []
-
-            # Add image files
-            images_dir = self.get_images_dir()
-            if images_dir.exists():
-                for img_file in sorted(images_dir.glob("*")):
-                    if img_file.is_file():
-                        rel_path = img_file.relative_to(self.get_save_dir())
-                        parts.append(str(rel_path))
-
-            # Add OCR files
-            ocr_dir = self.get_ocr_dir()
-            if ocr_dir.exists():
-                for ocr_file in sorted(ocr_dir.rglob("*")):
-                    if ocr_file.is_file():
-                        rel_path = ocr_file.relative_to(self.get_save_dir())
-                        parts.append(str(rel_path))
-
-            if parts:
-                root["hasPart"] = [{"@id": part} for part in parts]
-
-            # Write RO-Crate metadata to root directory (per RO-Crate spec)
-            crate.metadata.write(save_dir)
+            # Use ROCrateWriter to generate RO-Crate metadata
+            writer = ROCrateWriter(include_files=True)
+            writer.write(
+                self.library_book,
+                save_dir,
+                images_dir=images_dir,
+                ocr_dir=ocr_dir
+            )
             logger.info(f"Saved RO-Crate metadata to {save_dir / 'ro-crate-metadata.json'}")
 
         except Exception as e:
-            logger.error(f"Failed to save metadata files: {e}", exc_info=True)
+            logger.error(f"Failed to save RO-Crate metadata: {e}", exc_info=True)
 
     async def download_ocr(self, book: LibraryBook) -> int:
         """Download OCR files for the book.

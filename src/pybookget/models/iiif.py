@@ -1,6 +1,8 @@
 """IIIF (International Image Interoperability Framework) data models.
 
 These models represent IIIF Presentation API v2 and v3 manifests.
+
+For parsing IIIF manifests, use pybookget.formats.iiif.IIIFParser.
 """
 
 from dataclasses import dataclass, field
@@ -167,23 +169,3 @@ class IIIFManifestV3:
         return self.items
 
 
-def parse_iiif_manifest(data: Dict[str, Any]) -> Union[IIIFManifestV2, IIIFManifestV3]:
-    """Parse IIIF manifest and auto-detect version.
-
-    Args:
-        data: Raw IIIF manifest JSON as dictionary
-
-    Returns:
-        IIIFManifestV2 or IIIFManifestV3 depending on detected version
-
-    Raises:
-        ValueError: If manifest format is not recognized
-    """
-    # Check for v3 indicators
-    if 'type' in data and data.get('type') == 'Manifest':
-        return IIIFManifestV3.from_dict(data)
-    # Check for v2 indicators
-    elif '@context' in data or 'sequences' in data:
-        return IIIFManifestV2.from_dict(data)
-    else:
-        raise ValueError("Unable to determine IIIF manifest version")

@@ -9,7 +9,8 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from pybookget.config import Config
-from pybookget.models.iiif import parse_iiif_manifest, IIIFCanvas
+from pybookget.formats.iiif import IIIFParser
+from pybookget.models.iiif import IIIFCanvas
 from pybookget.router.base import BaseHandler
 from pybookget.router.registry import register_handler
 
@@ -40,7 +41,10 @@ class IIIFHandler(BaseHandler):
             response = await client.get(self.url)
             response.raise_for_status()
             manifest_data = response.json()
-            manifest = parse_iiif_manifest(manifest_data)
+
+            # Parse IIIF manifest using format parser
+            parser = IIIFParser()
+            manifest = parser.parse(manifest_data)
 
             # Extract metadata
             self.book_id = self.get_book_id()

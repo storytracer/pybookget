@@ -14,6 +14,8 @@ import re
 from typing import Optional
 
 from pybookget.config import Config
+from pybookget.formats.iiif import IIIFParser
+from pybookget.formats.mets import METSParser
 from pybookget.handlers.iiif import IIIFHandler
 from pybookget.handlers.library import LibraryHandler
 from pybookget.models.erara import (
@@ -21,9 +23,7 @@ from pybookget.models.erara import (
     add_iiif_urls_to_book,
     create_erara_book_from_mets,
 )
-from pybookget.models.iiif import parse_iiif_manifest
 from pybookget.models.library import LibraryBook
-from pybookget.models.mets import parse_mets_xml
 from pybookget.router.registry import register_handler
 
 logger = logging.getLogger(__name__)
@@ -79,9 +79,12 @@ class ERaraHandler(LibraryHandler):
         logger.info("Fetching IIIF manifest and METS metadata...")
         iiif_data, mets_data = await self._fetch_metadata(iiif_url, mets_url)
 
-        # Parse manifests
-        iiif_manifest = parse_iiif_manifest(iiif_data)
-        mets_document = parse_mets_xml(mets_data)
+        # Parse manifests using format parsers
+        iiif_parser = IIIFParser()
+        iiif_manifest = iiif_parser.parse(iiif_data)
+
+        mets_parser = METSParser()
+        mets_document = mets_parser.parse(mets_data)
 
         # Create combined book model from METS
         erara_book = create_erara_book_from_mets(book_id, mets_document)
