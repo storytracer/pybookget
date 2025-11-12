@@ -38,16 +38,17 @@ class LibraryHandler(BaseHandler):
     1. Fetch and save metadata (always done)
     2. Download OCR files (skipped if config.skip_ocr is True)
     3. Download images (skipped if config.skip_images is True)
+    4. Write RO-Crate metadata with hasPart relationships (automatic)
 
     Subclasses must implement:
     - fetch_and_save_metadata(): Fetch metadata and return LibraryBook
-    - get_ocr_tasks(): Create download tasks for OCR files
-    - get_image_tasks(): Create download tasks for images
 
     Subclasses can override:
-    - save_metadata_files(): Customize metadata file saving
+    - save_rocrate_metadata(): Customize RO-Crate metadata generation
     - download_ocr(): Customize OCR download logic
     - download_images_from_book(): Customize image download logic
+    - get_ocr_tasks(): Customize OCR task creation
+    - get_image_tasks(): Customize image task creation
     """
 
     def __init__(self, url: str, config: Config):
@@ -114,6 +115,10 @@ class LibraryHandler(BaseHandler):
             else:
                 logger.info("Phase 3: Skipping image downloads (--skip-images flag set)")
 
+            # Phase 4: Write RO-Crate metadata (after downloads complete)
+            logger.info("Phase 4: Writing RO-Crate metadata...")
+            await self.save_rocrate_metadata()
+
             logger.info(
                 f"Download complete: {images_downloaded}/{self.library_book.total_pages} images, "
                 f"{ocr_files_downloaded} OCR files"
@@ -137,7 +142,10 @@ class LibraryHandler(BaseHandler):
         1. Fetch all necessary metadata (IIIF, METS, API responses, etc.)
         2. Parse the metadata
         3. Create and return a LibraryBook object with pages
-        4. Call save_metadata_files() to save raw metadata
+        4. Optionally save library-specific metadata files (manifest.json, mets.xml, etc.)
+           to the metadata/ subdirectory
+
+        Note: RO-Crate metadata is written automatically after downloads complete.
 
         Returns:
             LibraryBook object with metadata and pages populated
@@ -147,12 +155,12 @@ class LibraryHandler(BaseHandler):
         """
         pass
 
-    async def save_metadata_files(self, **kwargs) -> None:
-        """Save metadata files to disk using RO-Crate format.
+    async def save_rocrate_metadata(self, **kwargs) -> None:
+        """Write RO-Crate metadata to the root directory.
 
-        Default implementation creates RO-Crate metadata following Dublin Core standard.
-        Subclasses should override this to save additional library-specific metadata files
-        (manifest.json, mets.xml, etc.) and can call this method to generate RO-Crate.
+        This method is called automatically after all downloads complete.
+        It creates an RO-Crate metadata file following the Dublin Core standard,
+        including hasPart relationships to all downloaded images and OCR files.
 
         The RO-Crate includes:
         - Root dataset with book metadata (Dublin Core)
@@ -166,6 +174,7 @@ class LibraryHandler(BaseHandler):
             logger.warning("No library book available to save metadata")
             return
 
+        save_dir = self.get_save_dir()
         metadata_dir = self.get_metadata_dir()
 
         try:
@@ -206,7 +215,7 @@ class LibraryHandler(BaseHandler):
                 root["publisher"] = publisher
 
             if metadata.type:
-                root["@type"] = ["Dataset", metadata.type]  # dc:type
+                root["additionalType"] = metadata.type  # dc:type -> Schema.org additionalType
 
             if metadata.format:
                 root["encodingFormat"] = metadata.format  # dc:format
@@ -261,9 +270,9 @@ class LibraryHandler(BaseHandler):
             if parts:
                 root["hasPart"] = [{"@id": part} for part in parts]
 
-            # Write RO-Crate metadata
-            crate.metadata.write(metadata_dir)
-            logger.info(f"Saved RO-Crate metadata to {metadata_dir / 'ro-crate-metadata.json'}")
+            # Write RO-Crate metadata to root directory (per RO-Crate spec)
+            crate.metadata.write(save_dir)
+            logger.info(f"Saved RO-Crate metadata to {save_dir / 'ro-crate-metadata.json'}")
 
         except Exception as e:
             logger.error(f"Failed to save metadata files: {e}", exc_info=True)

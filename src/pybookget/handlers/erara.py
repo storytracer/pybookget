@@ -90,31 +90,27 @@ class ERaraHandler(LibraryHandler):
         image_url_pairs = self.iiif_helper._extract_image_urls(iiif_manifest.canvases)
         add_iiif_urls_to_book(erara_book, image_url_pairs)
 
-        # Save metadata files
-        await self.save_metadata_files(
+        # Save library-specific metadata files (manifest.json, mets.xml)
+        await self._save_library_metadata(
             iiif_data=iiif_data,
             mets_data=mets_data,
-            book=erara_book
         )
 
         return erara_book
 
-    async def save_metadata_files(self, iiif_data: dict, mets_data: str, book: ERaraBook) -> None:
-        """Save e-rara metadata files to disk.
+    async def _save_library_metadata(self, iiif_data: dict, mets_data: str) -> None:
+        """Save e-rara library-specific metadata files.
 
-        Saves:
-        - manifest.json (IIIF manifest - library specific)
-        - mets.xml (METS metadata - library specific)
-        - ro-crate-metadata.json (RO-Crate metadata - standard format)
+        Saves to metadata/ subdirectory:
+        - manifest.json (IIIF manifest)
+        - mets.xml (METS metadata)
+
+        Note: RO-Crate metadata is written automatically after downloads complete.
 
         Args:
             iiif_data: IIIF manifest as dictionary
             mets_data: METS XML as string
-            book: ERaraBook object
         """
-        # Set library_book before calling parent method
-        self.library_book = book
-
         metadata_dir = self.get_metadata_dir()
 
         try:
@@ -130,12 +126,8 @@ class ERaraHandler(LibraryHandler):
                 f.write(mets_data)
             logger.info(f"Saved METS to {mets_path}")
 
-            # Call parent method to create RO-Crate metadata
-            # This creates ro-crate-metadata.json with Dublin Core metadata
-            await super().save_metadata_files()
-
         except Exception as e:
-            logger.error(f"Failed to save metadata files: {e}")
+            logger.error(f"Failed to save library metadata files: {e}")
 
     def _extract_erara_id(self) -> Optional[str]:
         """Extract e-rara book ID from URL.

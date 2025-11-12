@@ -101,10 +101,11 @@ class BaseHandler(ABC):
         The slug is deterministic, reversible, and works universally
         with any IIIF manifest URL.
 
-        Creates three subdirectories:
+        Directory structure:
+        - ./: Root directory (contains ro-crate-metadata.json per RO-Crate spec)
         - images/: For downloaded image files
-        - metadata/: For manifest.json and other metadata
-        - ocr/: For OCR text files (created but initially empty)
+        - metadata/: For library-specific metadata files (manifest.json, mets.xml, etc.)
+        - ocr/: For OCR text files (alto/, text/ subdirectories)
 
         Returns:
             Path object for base save directory
