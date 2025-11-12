@@ -112,6 +112,9 @@ class ERaraHandler(LibraryHandler):
             mets_data: METS XML as string
             book: ERaraBook object
         """
+        # Set library_book before calling parent method
+        self.library_book = book
+
         metadata_dir = self.get_metadata_dir()
 
         try:
