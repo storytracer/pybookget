@@ -65,13 +65,13 @@ pytest
 pytest --cov=pybookget
 
 # Type checking
-mypy pybookget/
+mypy src/pybookget/
 
 # Linting
-ruff check pybookget/
+ruff check src/pybookget/
 
 # Code formatting
-black pybookget/
+black src/pybookget/
 ```
 
 ## Architecture
@@ -79,35 +79,38 @@ black pybookget/
 ### Project Structure
 
 ```
-pybookget/
+pybookget/                 # Git repository root
 ├── README.md              # Comprehensive documentation
 ├── CLAUDE.md              # This file
 ├── LICENSE                # AGPL-3.0
 ├── pyproject.toml         # Package configuration
-└── pybookget/             # Python package
-    ├── __init__.py        # Package exports
-    ├── config.py          # Configuration management (Config class)
-    ├── cli.py             # Click-based CLI interface
-    ├── models/            # Data models
-    │   └── iiif.py        # IIIF manifest parsing (v2 & v3)
-    ├── http/              # HTTP utilities (async-only)
-    │   ├── client.py      # httpx AsyncClient factory
-    │   ├── download.py    # Async download manager with fallback support
-    │   ├── cookies.py     # Cookie file parsing (Netscape format)
-    │   └── headers.py     # Header file parsing
-    ├── utils/             # Utility functions
-    │   ├── file.py        # File operations
-    │   └── text.py        # Text parsing
-    ├── router/            # Handler registry pattern
-    │   ├── base.py        # BaseHandler abstract class
-    │   └── registry.py    # Handler registry, decorator, download_from_url()
-    └── handlers/          # Handler implementations
-        └── iiif.py        # Universal IIIF handler (v2 & v3)
+├── requirements.txt       # Direct dependencies list
+└── src/                   # Source code (src layout)
+    └── pybookget/         # Python package
+        ├── __init__.py        # Package exports
+        ├── __main__.py        # Entry point for python -m pybookget
+        ├── config.py          # Configuration management (Config class)
+        ├── cli.py             # Click-based CLI interface
+        ├── models/            # Data models
+        │   └── iiif.py        # IIIF manifest parsing (v2 & v3)
+        ├── http/              # HTTP utilities (async-only)
+        │   ├── client.py      # httpx AsyncClient factory
+        │   ├── download.py    # Async download manager with fallback support
+        │   ├── cookies.py     # Cookie file parsing (Netscape format)
+        │   └── headers.py     # Header file parsing
+        ├── utils/             # Utility functions
+        │   ├── file.py        # File operations
+        │   └── text.py        # Text parsing
+        ├── router/            # Handler registry pattern
+        │   ├── base.py        # BaseHandler abstract class
+        │   └── registry.py    # Handler registry, decorator, download_from_url()
+        └── handlers/          # Handler implementations
+            └── iiif.py        # Universal IIIF handler (v2 & v3)
 ```
 
 ### Core Components
 
-#### 1. **Config** (`pybookget/config.py`)
+#### 1. **Config** (`src/pybookget/config.py`)
 Central configuration class with:
 - Download paths and output settings
 - Page/volume range filtering
@@ -117,7 +120,7 @@ Central configuration class with:
 - Retry configuration (tenacity integration)
 - Rate limiting
 
-#### 2. **CLI** (`pybookget/cli.py`)
+#### 2. **CLI** (`src/pybookget/cli.py`)
 Click-based command-line interface with commands:
 - `download` - Download single book
 - `batch` - Download multiple books from file
@@ -125,13 +128,13 @@ Click-based command-line interface with commands:
 - `list-handlers` - List available handlers
 - `info` - Show handler information
 
-#### 3. **Handler System** (`pybookget/router/`, `pybookget/handlers/`)
+#### 3. **Handler System** (`src/pybookget/router/`, `src/pybookget/handlers/`)
 - **BaseHandler**: Abstract base class for all handlers
 - **Handler Registry**: Decorator-based registration (`@register_handler("name")`)
 - **Explicit Selection**: Users specify handler via `--handler iiif` (default)
 - **No Auto-Matching**: URLs are NOT automatically routed by domain patterns
 
-#### 4. **IIIF Handler** (`pybookget/handlers/iiif.py`)
+#### 4. **IIIF Handler** (`src/pybookget/handlers/iiif.py`)
 Universal IIIF Presentation API v2/v3 handler with advanced features:
 
 **Smart Size Negotiation:**
@@ -155,7 +158,7 @@ Universal IIIF Presentation API v2/v3 handler with advanced features:
 - `_build_image_url()`: Builds IIIF Image API URLs
 - `_download_images_with_fallback()`: Downloads with fallback support
 
-#### 5. **HTTP Layer** (`pybookget/http/`)
+#### 5. **HTTP Layer** (`src/pybookget/http/`)
 
 **Direct httpx Usage:**
 - `create_client()`: Factory for httpx.AsyncClient with config
@@ -176,7 +179,7 @@ Universal IIIF Presentation API v2/v3 handler with advanced features:
 - Configurable max retries, wait times, multiplier
 - Only retries on httpx errors (HTTPError, TimeoutException, NetworkError)
 
-#### 6. **Models** (`pybookget/models/iiif.py`)
+#### 6. **Models** (`src/pybookget/models/iiif.py`)
 Data models for IIIF manifests:
 - `IIIFManifest`: Top-level manifest (v2/v3)
 - `IIIFCanvas`: Canvas/page representation
@@ -289,7 +292,7 @@ config = Config(
 
 To add support for a new site/API:
 
-1. **Create handler** in `pybookget/handlers/mysite.py`:
+1. **Create handler** in `src/pybookget/handlers/mysite.py`:
 ```python
 from pybookget.router.base import BaseHandler
 from pybookget.router.registry import register_handler
@@ -317,12 +320,12 @@ class MySiteHandler(BaseHandler):
         return self._create_result(len(image_urls), downloaded)
 ```
 
-2. **Import in** `pybookget/handlers/__init__.py`:
+2. **Import in** `src/pybookget/handlers/__init__.py`:
 ```python
 from pybookget.handlers import iiif, mysite
 ```
 
-3. **Import in** `pybookget/router/registry.py` in `_initialize_handlers()`:
+3. **Import in** `src/pybookget/router/registry.py` in `_initialize_handlers()`:
 ```python
 from pybookget.handlers import iiif, mysite
 ```

@@ -54,7 +54,10 @@ Issues = "https://github.com/storytracer/pybookget/issues"
 pybookget = "pybookget.cli:main"
 
 [tool.setuptools]
-packages = ["pybookget", "pybookget.models", "pybookget.http", "pybookget.utils", "pybookget.router", "pybookget.handlers"]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.black]
 line-length = 100
