@@ -34,6 +34,7 @@ dependencies = [
     "tqdm>=4.65.0",
     "h2>=4.1.0",  # HTTP/2 support for httpx
     "tenacity>=8.2.0",  # Retry management
+    "url64>=0.1.0",  # URL-safe base64 encoding
 ]
 
 [project.optional-dependencies]
