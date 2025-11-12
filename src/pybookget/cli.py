@@ -62,6 +62,8 @@ def cli(ctx, version):
 @click.option('--quality', default=80, help='JPEG quality (1-100)')
 @click.option('--iiif-quality', default='default', help='IIIF quality: default, color, gray, bitonal')
 @click.option('--iiif-format', default='jpg', help='IIIF format: jpg, png, webp, tif')
+@click.option('--skip-images', is_flag=True, help='Skip image downloads (metadata always downloaded)')
+@click.option('--skip-ocr', is_flag=True, help='Skip OCR downloads (metadata always downloaded)')
 @click.option('--verbose', is_flag=True, help='Enable verbose logging')
 def download(
     url: str,
@@ -84,6 +86,8 @@ def download(
     quality: int,
     iiif_quality: str,
     iiif_format: str,
+    skip_images: bool,
+    skip_ocr: bool,
     verbose: bool,
 ):
     """Download a book from a URL.
@@ -116,6 +120,8 @@ def download(
         quality=quality,
         iiif_quality=iiif_quality,
         iiif_format=iiif_format,
+        skip_images=skip_images,
+        skip_ocr=skip_ocr,
     )
 
     if user_agent:

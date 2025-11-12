@@ -67,6 +67,10 @@ class Config:
     # Progress display
     show_progress: bool = True
 
+    # Download control flags
+    skip_images: bool = False  # Skip image downloads (metadata always downloaded)
+    skip_ocr: bool = False  # Skip OCR downloads (metadata always downloaded)
+
     def __post_init__(self):
         """Initialize and validate configuration."""
         # Parse page range if provided

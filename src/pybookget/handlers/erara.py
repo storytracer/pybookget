@@ -1,8 +1,9 @@
 """
 e-rara.ch handler with IIIF, METS metadata, and OCR support.
 
-This handler extends the IIIF handler to support e-rara.ch's additional features:
+This handler extends the LibraryHandler to support e-rara.ch's features:
 - METS metadata (OAI-PMH)
+- IIIF Presentation API (v2/v3) for images
 - ALTO XML OCR files
 - Plain text OCR files
 """
@@ -10,18 +11,18 @@ This handler extends the IIIF handler to support e-rara.ch's additional features
 import json
 import logging
 import re
-from pathlib import Path
-from typing import Dict, Optional
+from typing import Optional
 
 from pybookget.config import Config
 from pybookget.handlers.iiif import IIIFHandler
-from pybookget.http.download import DownloadManager, DownloadTask
+from pybookget.handlers.library import LibraryHandler
 from pybookget.models.erara import (
     ERaraBook,
     add_iiif_urls_to_book,
     create_erara_book_from_mets,
 )
 from pybookget.models.iiif import parse_iiif_manifest
+from pybookget.models.library import LibraryBook
 from pybookget.models.mets import parse_mets_xml
 from pybookget.router.registry import register_handler
 
@@ -29,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 
 @register_handler("erara")
-class ERaraHandler(IIIFHandler):
+class ERaraHandler(LibraryHandler):
     """Handler for e-rara.ch digital books.
 
     Supports:
@@ -39,6 +40,7 @@ class ERaraHandler(IIIFHandler):
     - Plain text OCR files
 
     Download order: metadata → OCR → images
+    Each phase can be skipped using config flags (except metadata).
     """
 
     def __init__(self, url: str, config: Config):
@@ -49,80 +51,103 @@ class ERaraHandler(IIIFHandler):
             config: Configuration object
         """
         super().__init__(url, config)
-        self.erara_book: Optional[ERaraBook] = None
+        self.iiif_helper = IIIFHandler(url, config)
 
-    async def run(self) -> Dict[str, any]:
-        """Execute e-rara book download.
-
-        Downloads in order:
-        1. Metadata (IIIF manifest + METS)
-        2. OCR files (ALTO XML + plain text)
-        3. Images (IIIF)
+    async def fetch_and_save_metadata(self) -> LibraryBook:
+        """Fetch and save e-rara metadata (IIIF + METS).
 
         Returns:
-            Dictionary with download results
+            ERaraBook with metadata and pages populated
+
+        Raises:
+            ValueError: If book ID cannot be extracted
+            Exception: If metadata cannot be fetched or parsed
         """
-        logger.info(f"Processing e-rara book: {self.url}")
+        # Extract book ID from URL
+        book_id = self._extract_erara_id()
+        if not book_id:
+            raise ValueError(f"Could not extract e-rara book ID from URL: {self.url}")
+
+        self.book_id = book_id
+        logger.info(f"e-rara book ID: {book_id}")
+
+        # Build URLs for IIIF and METS
+        iiif_url = self._build_iiif_url(book_id)
+        mets_url = self._build_mets_url(book_id)
+
+        # Fetch metadata
+        logger.info("Fetching IIIF manifest and METS metadata...")
+        iiif_data, mets_data = await self._fetch_metadata(iiif_url, mets_url)
+
+        # Parse manifests
+        iiif_manifest = parse_iiif_manifest(iiif_data)
+        mets_document = parse_mets_xml(mets_data)
+
+        # Create combined book model from METS
+        erara_book = create_erara_book_from_mets(book_id, mets_document)
+
+        # Extract IIIF image URLs and add to book model
+        image_url_pairs = self.iiif_helper._extract_image_urls(iiif_manifest.canvases)
+        add_iiif_urls_to_book(erara_book, image_url_pairs)
+
+        # Save metadata files
+        await self.save_metadata_files(
+            iiif_data=iiif_data,
+            mets_data=mets_data,
+            book=erara_book
+        )
+
+        return erara_book
+
+    async def save_metadata_files(self, iiif_data: dict, mets_data: str, book: ERaraBook) -> None:
+        """Save e-rara metadata files to disk.
+
+        Saves:
+        - manifest.json (IIIF manifest)
+        - mets.xml (METS metadata)
+        - book_info.json (combined metadata)
+
+        Args:
+            iiif_data: IIIF manifest as dictionary
+            mets_data: METS XML as string
+            book: ERaraBook object
+        """
+        metadata_dir = self.get_metadata_dir()
 
         try:
-            # Extract book ID from URL
-            self.book_id = self._extract_erara_id()
-            if not self.book_id:
-                raise ValueError(f"Could not extract e-rara book ID from URL: {self.url}")
+            # Save IIIF manifest
+            manifest_path = metadata_dir / "manifest.json"
+            with open(manifest_path, 'w', encoding='utf-8') as f:
+                json.dump(iiif_data, f, indent=2, ensure_ascii=False)
+            logger.info(f"Saved IIIF manifest to {manifest_path}")
 
-            logger.info(f"e-rara book ID: {self.book_id}")
+            # Save METS
+            mets_path = metadata_dir / "mets.xml"
+            with open(mets_path, 'w', encoding='utf-8') as f:
+                f.write(mets_data)
+            logger.info(f"Saved METS to {mets_path}")
 
-            # Build URLs for IIIF and METS
-            iiif_url = self._build_iiif_url()
-            mets_url = self._build_mets_url()
-
-            # Phase 1: Fetch and save metadata
-            logger.info("Phase 1: Fetching metadata...")
-            iiif_data, mets_data = await self._fetch_metadata(iiif_url, mets_url)
-
-            # Parse manifests
-            iiif_manifest = parse_iiif_manifest(iiif_data)
-            mets_document = parse_mets_xml(mets_data)
-
-            # Create combined book model
-            self.erara_book = create_erara_book_from_mets(self.book_id, mets_document)
-            self.title = self.erara_book.title
-
-            logger.info(f"Book: {self.title}")
-            logger.info(f"Total pages: {len(self.erara_book.pages)}")
-
-            # Extract IIIF image URLs and add to book model
-            image_url_pairs = self._extract_image_urls(iiif_manifest.canvases)
-            add_iiif_urls_to_book(self.erara_book, image_url_pairs)
-
-            # Save metadata files
-            await self._save_metadata_files(iiif_data, mets_data)
-
-            # Phase 2: Download OCR files
-            logger.info("Phase 2: Downloading OCR files...")
-            ocr_downloaded = await self._download_ocr_files()
-
-            # Phase 3: Download images
-            logger.info("Phase 3: Downloading images...")
-            images_dir = self.get_images_dir()
-            images_downloaded = await self._download_images_with_fallback(
-                image_url_pairs, images_dir
-            )
-
-            logger.info(
-                f"Download complete: {images_downloaded}/{len(image_url_pairs)} images, "
-                f"{ocr_downloaded} OCR files"
-            )
-
-            return self._create_result(
-                len(image_url_pairs),
-                images_downloaded,
-                ocr_downloaded=ocr_downloaded,
-            )
+            # Save combined book info with e-rara specific fields
+            book_info_path = metadata_dir / "book_info.json"
+            book_info = {
+                "book_id": book.book_id,
+                "title": book.metadata.title,
+                "subtitle": book.metadata.subtitle,
+                "author": book.metadata.author,
+                "publisher": book.metadata.publisher,
+                "date": book.metadata.date,
+                "language": book.metadata.language,
+                "doi": book.doi,
+                "license": book.metadata.license,
+                "extent": book.metadata.extent if hasattr(book.metadata, 'extent') else None,
+                "total_pages": book.total_pages,
+            }
+            with open(book_info_path, 'w', encoding='utf-8') as f:
+                json.dump(book_info, f, indent=2, ensure_ascii=False)
+            logger.info(f"Saved book info to {book_info_path}")
 
         except Exception as e:
-            logger.error(f"Failed to process e-rara book: {e}", exc_info=True)
-            return self._create_result(0, 0, error=str(e))
+            logger.error(f"Failed to save metadata files: {e}")
 
     def _extract_erara_id(self) -> Optional[str]:
         """Extract e-rara book ID from URL.
@@ -151,23 +176,29 @@ class ERaraHandler(IIIFHandler):
 
         return None
 
-    def _build_iiif_url(self) -> str:
+    def _build_iiif_url(self, book_id: str) -> str:
         """Build IIIF manifest URL from book ID.
+
+        Args:
+            book_id: e-rara book identifier
 
         Returns:
             IIIF manifest URL
         """
-        return f"https://www.e-rara.ch/i3f/v20/{self.book_id}/manifest"
+        return f"https://www.e-rara.ch/i3f/v20/{book_id}/manifest"
 
-    def _build_mets_url(self) -> str:
+    def _build_mets_url(self, book_id: str) -> str:
         """Build METS URL from book ID.
+
+        Args:
+            book_id: e-rara book identifier
 
         Returns:
             METS OAI-PMH URL
         """
         return (
             f"https://www.e-rara.ch/oai"
-            f"?verb=GetRecord&metadataPrefix=mets&identifier={self.book_id}"
+            f"?verb=GetRecord&metadataPrefix=mets&identifier={book_id}"
         )
 
     async def _fetch_metadata(self, iiif_url: str, mets_url: str) -> tuple[dict, str]:
@@ -179,6 +210,9 @@ class ERaraHandler(IIIFHandler):
 
         Returns:
             Tuple of (iiif_data, mets_xml_string)
+
+        Raises:
+            httpx.HTTPError: If requests fail
         """
         client = self._ensure_client()
 
@@ -195,143 +229,3 @@ class ERaraHandler(IIIFHandler):
         mets_data = mets_response.text
 
         return iiif_data, mets_data
-
-    async def _save_metadata_files(self, iiif_data: dict, mets_data: str) -> None:
-        """Save metadata files to disk.
-
-        Saves:
-        - manifest.json (IIIF manifest)
-        - mets.xml (METS metadata)
-        - book_info.json (combined metadata from e-rara model)
-
-        Args:
-            iiif_data: IIIF manifest as dictionary
-            mets_data: METS XML as string
-        """
-        metadata_dir = self.get_metadata_dir()
-
-        try:
-            # Save IIIF manifest
-            manifest_path = metadata_dir / "manifest.json"
-            with open(manifest_path, 'w', encoding='utf-8') as f:
-                json.dump(iiif_data, f, indent=2, ensure_ascii=False)
-            logger.info(f"Saved IIIF manifest to {manifest_path}")
-
-            # Save METS
-            mets_path = metadata_dir / "mets.xml"
-            with open(mets_path, 'w', encoding='utf-8') as f:
-                f.write(mets_data)
-            logger.info(f"Saved METS to {mets_path}")
-
-            # Save combined book info
-            if self.erara_book:
-                book_info_path = metadata_dir / "book_info.json"
-                book_info = {
-                    "book_id": self.erara_book.book_id,
-                    "title": self.erara_book.title,
-                    "subtitle": self.erara_book.subtitle,
-                    "author": self.erara_book.author,
-                    "publisher": self.erara_book.publisher,
-                    "date": self.erara_book.date,
-                    "language": self.erara_book.language,
-                    "doi": self.erara_book.doi,
-                    "license": self.erara_book.license,
-                    "total_pages": len(self.erara_book.pages),
-                }
-                with open(book_info_path, 'w', encoding='utf-8') as f:
-                    json.dump(book_info, f, indent=2, ensure_ascii=False)
-                logger.info(f"Saved book info to {book_info_path}")
-
-        except Exception as e:
-            logger.error(f"Failed to save metadata files: {e}")
-
-    async def _download_ocr_files(self) -> int:
-        """Download OCR files (ALTO XML and plain text).
-
-        Downloads both ALTO and plain text versions for each page.
-        Uses the same concurrent download manager as images.
-
-        Returns:
-            Number of successfully downloaded OCR files
-        """
-        if not self.erara_book or not self.erara_book.pages:
-            logger.warning("No pages to download OCR for")
-            return 0
-
-        ocr_dir = self.get_ocr_dir()
-        alto_dir = ocr_dir / "alto"
-        text_dir = ocr_dir / "text"
-
-        # Create subdirectories
-        alto_dir.mkdir(parents=True, exist_ok=True)
-        text_dir.mkdir(parents=True, exist_ok=True)
-
-        # Create download tasks for OCR files
-        tasks = []
-
-        for page in self.erara_book.pages:
-            # Apply page range filter
-            if not self.config.is_page_in_range(page.order):
-                continue
-
-            page_num_str = str(page.order).zfill(4)
-
-            # Add ALTO XML task
-            if page.alto_url:
-                alto_path = alto_dir / f"{page_num_str}.xml"
-                tasks.append(
-                    DownloadTask(
-                        url=page.alto_url,
-                        save_path=alto_path,
-                        book_id=self.book_id or "unknown",
-                        title=self.title,
-                    )
-                )
-
-            # Add plain text task
-            if page.plain_text_url:
-                text_path = text_dir / f"{page_num_str}.txt"
-                tasks.append(
-                    DownloadTask(
-                        url=page.plain_text_url,
-                        save_path=text_path,
-                        book_id=self.book_id or "unknown",
-                        title=self.title,
-                    )
-                )
-
-        if not tasks:
-            logger.warning("No OCR files to download (possibly filtered by page range)")
-            return 0
-
-        logger.info(f"Downloading {len(tasks)} OCR files...")
-
-        # Execute downloads with same concurrency control as images
-        dm = DownloadManager(self.config)
-        dm.add_tasks(tasks)
-        successful = await dm.execute()
-
-        return successful
-
-    def _create_result(
-        self,
-        total_pages: int,
-        downloaded: int,
-        error: Optional[str] = None,
-        ocr_downloaded: int = 0,
-    ) -> Dict[str, any]:
-        """Create standardized result dictionary.
-
-        Args:
-            total_pages: Total number of pages/images
-            downloaded: Number of images successfully downloaded
-            error: Optional error message
-            ocr_downloaded: Number of OCR files downloaded
-
-        Returns:
-            Result dictionary
-        """
-        result = super()._create_result(total_pages, downloaded, error)
-        result["ocr_files"] = ocr_downloaded
-        result["type"] = "erara"
-        return result

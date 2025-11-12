@@ -3,54 +3,90 @@ e-rara.ch specific data models.
 
 This module provides data models for e-rara.ch digital books, combining
 IIIF, METS, and OCR data.
+
+These models extend the base library models with e-rara-specific fields.
 """
 
 from dataclasses import dataclass, field
 from typing import Optional
 
+from pybookget.models.library import LibraryBook, LibraryMetadata, LibraryPage
 from pybookget.models.mets import METSDocument
 
 
 @dataclass
-class ERaraPage:
-    """Represents a page in an e-rara book with all available resources."""
-    order: int
-    label: str
-    page_id: str  # Numeric page ID (e.g., "24224396")
+class ERaraMetadata(LibraryMetadata):
+    """e-rara specific metadata extending base LibraryMetadata.
 
-    # IIIF
-    iiif_image_url: Optional[str] = None
-    iiif_fallback_url: Optional[str] = None
-
-    # OCR
-    alto_url: Optional[str] = None
-    plain_text_url: Optional[str] = None
+    Additional fields:
+        doi: Digital Object Identifier
+        extent: Physical extent information
+    """
+    doi: Optional[str] = None
+    extent: Optional[str] = None
 
 
 @dataclass
-class ERaraBook:
+class ERaraPage(LibraryPage):
+    """e-rara page extending base LibraryPage.
+
+    Inherits all fields from LibraryPage. The page_id in e-rara
+    is a numeric string (e.g., "24224396").
     """
-    Represents a complete e-rara book with all metadata and resources.
+    pass  # All functionality inherited from LibraryPage
 
-    Combines IIIF manifest data, METS metadata, and OCR information.
+
+@dataclass
+class ERaraBook(LibraryBook):
+    """e-rara book extending base LibraryBook.
+
+    Additional fields:
+        mets_document: Parsed METS document for advanced use cases
     """
-    book_id: str  # e.g., "24224395"
-    title: str
+    # Override to use ERaraMetadata type hint
+    metadata: ERaraMetadata = field(default_factory=lambda: ERaraMetadata(title="unknown"))
 
-    # Optional metadata from METS
-    subtitle: Optional[str] = None
-    author: Optional[str] = None
-    publisher: Optional[str] = None
-    date: Optional[str] = None
-    language: Optional[str] = None
-    doi: Optional[str] = None
-    license: Optional[str] = None
-
-    # Pages with all resources
+    # Override to use ERaraPage type hint
     pages: list[ERaraPage] = field(default_factory=list)
 
-    # Source documents
+    # e-rara specific: store original METS document
     mets_document: Optional[METSDocument] = None
+
+    # Backwards compatibility properties
+    @property
+    def doi(self) -> Optional[str]:
+        """Convenience property for DOI."""
+        return self.metadata.doi if isinstance(self.metadata, ERaraMetadata) else None
+
+    @property
+    def subtitle(self) -> Optional[str]:
+        """Convenience property for subtitle."""
+        return self.metadata.subtitle
+
+    @property
+    def author(self) -> Optional[str]:
+        """Convenience property for author."""
+        return self.metadata.author
+
+    @property
+    def publisher(self) -> Optional[str]:
+        """Convenience property for publisher."""
+        return self.metadata.publisher
+
+    @property
+    def date(self) -> Optional[str]:
+        """Convenience property for date."""
+        return self.metadata.date
+
+    @property
+    def language(self) -> Optional[str]:
+        """Convenience property for language."""
+        return self.metadata.language
+
+    @property
+    def license(self) -> Optional[str]:
+        """Convenience property for license."""
+        return self.metadata.license
 
 
 def create_erara_book_from_mets(book_id: str, mets_doc: METSDocument) -> ERaraBook:
@@ -64,18 +100,25 @@ def create_erara_book_from_mets(book_id: str, mets_doc: METSDocument) -> ERaraBo
     Returns:
         ERaraBook with metadata and page structure
     """
-    metadata = mets_doc.metadata
+    mets_metadata = mets_doc.metadata
 
+    # Create ERaraMetadata from METS metadata
+    metadata = ERaraMetadata(
+        title=mets_metadata.title or f"Book {book_id}",
+        subtitle=mets_metadata.subtitle,
+        author=mets_metadata.author,
+        publisher=mets_metadata.publisher,
+        date=mets_metadata.date,
+        language=mets_metadata.language,
+        license=mets_metadata.license,
+        doi=mets_metadata.doi,
+        extent=mets_metadata.extent,
+    )
+
+    # Create book with metadata
     book = ERaraBook(
         book_id=book_id,
-        title=metadata.title or f"Book {book_id}",
-        subtitle=metadata.subtitle,
-        author=metadata.author,
-        publisher=metadata.publisher,
-        date=metadata.date,
-        language=metadata.language,
-        doi=metadata.doi,
-        license=metadata.license,
+        metadata=metadata,
         mets_document=mets_doc
     )
 
@@ -163,11 +206,11 @@ def add_iiif_urls_to_book(book: ERaraBook, iiif_image_urls: list[tuple[str, Opti
         iiif_image_urls: List of (primary_url, fallback_url) tuples from IIIF handler
 
     Note:
-        Modifies book.pages in place
+        Modifies book.pages in place, setting image_url and image_fallback_url
     """
     # Match IIIF URLs to pages by order/index
     for i, page in enumerate(book.pages):
         if i < len(iiif_image_urls):
             primary_url, fallback_url = iiif_image_urls[i]
-            page.iiif_image_url = primary_url
-            page.iiif_fallback_url = fallback_url
+            page.image_url = primary_url
+            page.image_fallback_url = fallback_url
