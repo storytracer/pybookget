@@ -5,6 +5,7 @@ click>=8.0.0
 tqdm>=4.65.0
 tenacity>=8.2.0  # Retry management
 url64>=0.1.0  # URL-safe base64 encoding
+tldextract>=5.0.0  # Extract root domain from URLs
 
 # Optional: for better progress bars
 # rich>=13.0.0

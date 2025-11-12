@@ -4,6 +4,7 @@ import re
 from typing import Optional, Tuple
 from urllib.parse import urlparse
 
+import tldextract
 import url64
 
 
@@ -27,16 +28,29 @@ def extract_between(text: str, start: str, end: str) -> Optional[str]:
 
 
 def get_domain(url: str) -> str:
-    """Extract domain from URL.
+    """Extract root-level domain from URL.
+
+    Uses tldextract to properly handle multi-part TLDs like .co.uk, .com.au, etc.
 
     Args:
         url: URL to parse
 
     Returns:
-        Domain name (e.g., 'example.com')
+        Root-level domain name (e.g., 'loc.gov' from 'www.loc.gov',
+        'example.co.uk' from 'subdomain.example.co.uk')
+
+    Examples:
+        >>> get_domain('https://www.loc.gov/item/manifest.json')
+        'loc.gov'
+        >>> get_domain('https://archive.org/details/item')
+        'archive.org'
+        >>> get_domain('https://www.example.co.uk/page')
+        'example.co.uk'
     """
-    parsed = urlparse(url)
-    return parsed.netloc
+    extracted = tldextract.extract(url)
+    # Return registered domain (domain + suffix)
+    # e.g., 'loc' + 'gov' = 'loc.gov'
+    return f"{extracted.domain}.{extracted.suffix}"
 
 
 def get_host_url(url: str) -> str:

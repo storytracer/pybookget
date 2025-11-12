@@ -39,8 +39,7 @@ pybookget download "https://www.loc.gov/item/ltf90007547/manifest.json"
 pybookget download "URL" \
     --handler iiif \
     --output ./books \
-    --pages "1:50" \
-    --iiif-max-size 2000
+    --pages "1:50"
 
 # List available handlers
 pybookget list-handlers
@@ -116,7 +115,7 @@ Central configuration class with:
 - Page/volume range filtering
 - Concurrency settings (threads, concurrent tasks)
 - HTTP settings (timeout, user agent, proxy, SSL)
-- **IIIF Image API parameters** (max_size, quality, format, region, rotation)
+- **IIIF Image API parameters** (quality, format, region, rotation)
 - Retry configuration (tenacity integration)
 - Rate limiting
 
@@ -137,17 +136,16 @@ Click-based command-line interface with commands:
 #### 4. **IIIF Handler** (`src/pybookget/handlers/iiif.py`)
 Universal IIIF Presentation API v2/v3 handler with advanced features:
 
-**Smart Size Negotiation:**
-- `_calculate_size_parameter()`: Intelligently determines optimal IIIF size based on:
-  - Configured `iiif_max_size` limit
-  - Actual image dimensions from manifest
-  - Image orientation (landscape vs portrait)
-- Requests full size when images fit within limits
-- Constrains by larger dimension when exceeding limits
+**Image API Version Detection:**
+- `_detect_image_api_version()`: Detects IIIF Image API version (v2 vs v3)
+- `_calculate_size_parameter()`: Returns version-appropriate full-size parameter
+  - IIIF Image API v3: Uses `"max"` (canonical)
+  - IIIF Image API v2: Uses `"full"` (canonical)
+- Always requests full resolution images
 
 **Fallback URL Mechanism:**
 - `_build_image_url_with_fallback()`: Returns (primary_url, fallback_url) tuples
-- Primary: Optimized IIIF URL with size parameters
+- Primary: IIIF URL with full-size parameters
 - Fallback: Direct image URL (used if IIIF params return 404)
 - Automatic retry in download manager on 404 errors
 
@@ -231,16 +229,13 @@ The IIIF handler constructs URLs following the IIIF Image API specification:
 ```
 
 **Example URLs:**
-- Full size: `https://iiif.example.org/image123/full/full/0/default.jpg`
-- Constrained width: `https://iiif.example.org/image123/full/2000,/0/default.jpg`
-- Constrained height: `https://iiif.example.org/image123/full/,1500/0/gray.png`
+- Full size (v2): `https://iiif.example.org/image123/full/full/0/default.jpg`
+- Full size (v3): `https://iiif.example.org/image123/full/max/0/default.jpg`
 
-**Smart Sizing Logic:**
-1. No `iiif_max_size` → Request `full`
-2. Image dimensions unknown → Request `{max_size},` (safe constraint)
-3. Image fits within max → Request `full`
-4. Landscape (width > height) → Request `{max_size},`
-5. Portrait/Square → Request `,{max_size}`
+**Size Parameter Selection:**
+- IIIF Image API v3: Always uses `"max"` (canonical full-size parameter)
+- IIIF Image API v2: Always uses `"full"` (canonical full-size parameter)
+- Version detection is automatic based on service metadata
 
 ## Configuration
 
@@ -271,8 +266,7 @@ config = Config(
     retry_wait_max=10.0,          # Max wait between retries
     retry_multiplier=2.0,         # Exponential backoff multiplier
 
-    # IIIF Image API parameters
-    iiif_max_size=2000,           # Max dimension (None = full size)
+    # IIIF Image API parameters (always requests full size)
     iiif_quality="default",       # default, color, gray, bitonal
     iiif_format="jpg",            # jpg, png, webp, tif
     iiif_region="full",           # Region parameter

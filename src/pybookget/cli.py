@@ -59,7 +59,6 @@ def cli(ctx, version):
 @click.option('--user-agent', '-U', help='Custom user agent')
 @click.option('--no-ssl-verify', is_flag=True, help='Disable SSL verification')
 @click.option('--quality', default=80, help='JPEG quality (1-100)')
-@click.option('--iiif-max-size', type=int, help='IIIF max image dimension in pixels (default: full size)')
 @click.option('--iiif-quality', default='default', help='IIIF quality: default, color, gray, bitonal')
 @click.option('--iiif-format', default='jpg', help='IIIF format: jpg, png, webp, tif')
 @click.option('--verbose', is_flag=True, help='Enable verbose logging')
@@ -81,7 +80,6 @@ def download(
     user_agent: Optional[str],
     no_ssl_verify: bool,
     quality: int,
-    iiif_max_size: Optional[int],
     iiif_quality: str,
     iiif_format: str,
     verbose: bool,
@@ -113,7 +111,6 @@ def download(
         proxy=proxy,
         verify_ssl=not no_ssl_verify,
         quality=quality,
-        iiif_max_size=iiif_max_size,
         iiif_quality=iiif_quality,
         iiif_format=iiif_format,
     )

@@ -174,46 +174,67 @@ class IIIFHandler(BaseHandler):
         logger.debug(f"No IIIF service, using direct URL: {image.id}")
         return image.id
 
-    def _calculate_size_parameter(self, image) -> str:
-        """Calculate optimal IIIF size parameter based on image dimensions.
-
-        Implements smart size negotiation:
-        - If no max_size configured: request full size
-        - If image dimensions unknown: request max_size constraint
-        - If image fits within max_size: request full size
-        - If image exceeds max_size: request constrained size based on orientation
+    def _detect_image_api_version(self, service) -> int:
+        """Detect IIIF Image API version from service information.
 
         Args:
-            image: IIIF image object with optional width/height
+            service: IIIFService object
 
         Returns:
-            IIIF size parameter (e.g., "full", "2000,", ",1500", "!2000,2000")
+            API version as integer (2 or 3), defaults to 2 if unknown
         """
-        # No size limit configured - request full resolution
-        if not self.config.iiif_max_size:
-            return "full"
+        if not service:
+            return 2
 
-        max_size = self.config.iiif_max_size
+        # Check type field (v3 uses "ImageService3", "ImageService2")
+        if service.type:
+            if "ImageService3" in service.type or "ImageService3" == service.type:
+                return 3
+            elif "ImageService2" in service.type or "ImageService2" == service.type:
+                return 2
 
-        # Image dimensions unknown - use safe constraint
-        if not image.width or not image.height:
-            logger.debug(f"Unknown dimensions, using max constraint: {max_size},")
-            return f"{max_size},"
+        # Check context field
+        if service.context:
+            if "/image/3/" in service.context or "image/3/context" in service.context:
+                return 3
+            elif "/image/2/" in service.context or "image/2/context" in service.context:
+                return 2
 
-        # Check if image fits within max dimensions
-        if image.width <= max_size and image.height <= max_size:
-            logger.debug(f"Image ({image.width}x{image.height}) within limit, using full size")
-            return "full"
+        # Check profile field
+        if service.profile:
+            profile_str = service.profile if isinstance(service.profile, str) else str(service.profile)
+            if "/image/3/" in profile_str:
+                return 3
+            elif "/image/2/" in profile_str or "/image/1/" in profile_str:
+                return 2
 
-        # Image exceeds max - constrain by larger dimension
-        if image.width > image.height:
-            # Landscape: constrain width
-            logger.debug(f"Landscape image, constraining width to {max_size}")
-            return f"{max_size},"
-        else:
-            # Portrait or square: constrain height
-            logger.debug(f"Portrait/square image, constraining height to {max_size}")
-            return f",{max_size}"
+        # Default to v2 for backwards compatibility
+        logger.debug("Unable to detect IIIF Image API version, defaulting to v2")
+        return 2
+
+    def _calculate_size_parameter(self, image) -> str:
+        """Calculate IIIF size parameter based on Image API version.
+
+        Always requests full resolution images using the version-appropriate parameter:
+        - IIIF Image API v3: "max" (canonical)
+        - IIIF Image API v2: "full" (canonical)
+
+        Args:
+            image: IIIF image object with service information
+
+        Returns:
+            IIIF size parameter ("max" for v3, "full" for v2)
+        """
+        # Detect Image API version
+        api_version = self._detect_image_api_version(image.service)
+
+        # Determine canonical full-size parameter based on API version
+        # v3: "max" (full is deprecated)
+        # v2: "full" (canonical form)
+        full_size_param = "max" if api_version == 3 else "full"
+
+        logger.debug(f"Requesting full size using '{full_size_param}' (Image API v{api_version})")
+        return full_size_param
 
     async def _download_images_with_fallback(
         self,

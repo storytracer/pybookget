@@ -70,8 +70,7 @@ config = Config(
     page_range="1:100",
     threads_per_task=4,
     max_concurrent_tasks=8,
-    iiif_max_size=2000,  # Limit to 2000px for bandwidth savings
-    iiif_quality="color",
+    iiif_quality="color",  # Always downloads full resolution images
     iiif_format="jpg",
 )
 
@@ -199,7 +198,6 @@ For libraries with custom APIs or non-IIIF formats, you can easily add custom ha
 --user-agent, -U      Custom user agent
 --no-ssl-verify       Disable SSL verification
 --quality             JPEG quality 1-100 (default: 80)
---iiif-max-size       IIIF max image dimension in pixels (default: full size)
 --iiif-quality        IIIF quality: default, color, gray, bitonal (default: default)
 --iiif-format         IIIF format: jpg, png, webp, tif (default: jpg)
 --verbose             Enable verbose logging
@@ -222,8 +220,7 @@ config = Config(
     retry_wait_max=10.0,              # Max wait between retries (seconds)
     retry_multiplier=2.0,             # Exponential backoff multiplier
 
-    # IIIF Image API parameters
-    iiif_max_size=2000,               # Max dimension in pixels (None = full size)
+    # IIIF Image API parameters (always requests full resolution)
     iiif_quality="default",           # Quality: default, color, gray, bitonal
     iiif_format="jpg",                # Format: jpg, png, webp, tif
     iiif_region="full",               # Region parameter (usually 'full')
@@ -280,49 +277,35 @@ After all retries are exhausted, the file is marked as failed and skipped.
 
 ## IIIF Features
 
-pybookget includes advanced IIIF (International Image Interoperability Framework) support with smart size negotiation and fallback mechanisms for maximum compatibility.
+pybookget includes advanced IIIF (International Image Interoperability Framework) support with automatic Image API version detection and fallback mechanisms for maximum compatibility.
 
-### Smart Size Negotiation
+### Full Resolution Downloads
 
-The IIIF handler intelligently calculates optimal image sizes based on:
-- Your configured maximum dimension (`iiif_max_size`)
-- Actual image dimensions from the manifest
-- Image orientation (landscape vs portrait)
+The IIIF handler always requests full resolution images using the correct size parameter for each IIIF Image API version:
 
-#### How It Works
-
-1. **No size limit** (`iiif_max_size=None`): Requests full resolution images
-2. **Image fits within limit**: Requests full size even if limit is set
-3. **Image exceeds limit**: Constrains by the larger dimension
-   - Landscape images: constrains width (e.g., `2000,`)
-   - Portrait/square images: constrains height (e.g., `,2000`)
+- **IIIF Image API v3**: Uses `"max"` (canonical full-size parameter)
+- **IIIF Image API v2**: Uses `"full"` (canonical full-size parameter)
+- **Version detection**: Automatic based on service metadata in the manifest
 
 #### Example
 
 ```python
-# Download with 2000px maximum dimension
-config = Config(iiif_max_size=2000)
+# Downloads full resolution images
+config = Config(
+    iiif_quality="color",
+    iiif_format="jpg",
+)
 result = asyncio.run(download_from_url(manifest_url, config, handler="iiif"))
-
-# This will:
-# - Request full size for images ≤2000x2000px
-# - Request 2000px width for landscape images >2000px wide
-# - Request 2000px height for portrait images >2000px tall
 ```
 
 #### CLI Usage
 
 ```bash
-# Limit images to 2000px on longest side (saves bandwidth)
-pybookget download "https://www.loc.gov/item/ltf90007547/manifest.json" \
-    --iiif-max-size 2000
-
-# Request full resolution (default)
+# Download full resolution images (always)
 pybookget download "https://www.loc.gov/item/ltf90007547/manifest.json"
 
 # Combine with other IIIF parameters
 pybookget download "https://www.loc.gov/item/ltf90007547/manifest.json" \
-    --iiif-max-size 1500 \
     --iiif-quality color \
     --iiif-format png
 ```
@@ -331,12 +314,12 @@ pybookget download "https://www.loc.gov/item/ltf90007547/manifest.json" \
 
 Some IIIF servers don't fully support the IIIF Image API parameters. pybookget automatically handles this with a fallback mechanism:
 
-1. **Primary attempt**: Tries the optimized IIIF URL with size parameters
+1. **Primary attempt**: Tries the IIIF URL with full-size parameters (`max` or `full`)
 2. **Fallback on 404**: If the server returns 404, automatically tries the direct image URL
 3. **Logging**: Both attempts are logged for debugging
 
 This ensures compatibility with:
-- Fully compliant IIIF servers (use optimized URLs)
+- Fully compliant IIIF servers (use IIIF Image API URLs)
 - Partially compliant servers (fall back to direct URLs)
 - Legacy IIIF implementations
 
@@ -344,10 +327,9 @@ This ensures compatibility with:
 
 ```python
 # The handler automatically tries both URLs if needed:
-# Primary:  {service}/full/2000,/0/default.jpg
-# Fallback: {image.id}  (direct image URL)
+# Primary:  {service}/full/max/0/default.jpg  (v3)
+# Fallback: {image.id}  (direct image URL from manifest)
 
-config = Config(iiif_max_size=2000)
 result = asyncio.run(download_from_url(manifest_url, config, handler="iiif"))
 # No special configuration needed - fallback is automatic!
 ```
@@ -359,7 +341,6 @@ Full control over IIIF Image API request parameters:
 ```python
 config = Config(
     iiif_region="full",        # Region: 'full' or 'x,y,w,h'
-    iiif_size=None,            # Auto-calculated from iiif_max_size
     iiif_rotation="0",         # Rotation: 0, 90, 180, 270
     iiif_quality="default",    # Quality: default, color, gray, bitonal
     iiif_format="jpg",         # Format: jpg, png, webp, tif
@@ -373,14 +354,14 @@ The IIIF URL format is:
 
 Example generated URLs:
 ```
-# Full size image
+# Full size image (v2)
 https://iiif.example.org/image123/full/full/0/default.jpg
 
-# Constrained to 2000px width (landscape)
-https://iiif.example.org/image123/full/2000,/0/default.jpg
+# Full size image (v3)
+https://iiif.example.org/image123/full/max/0/default.jpg
 
-# Constrained to 1500px height (portrait), grayscale PNG
-https://iiif.example.org/image123/full/,1500/0/gray.png
+# Full size, grayscale PNG (v3)
+https://iiif.example.org/image123/full/max/0/gray.png
 ```
 
 ## Authentication

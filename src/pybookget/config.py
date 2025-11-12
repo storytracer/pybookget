@@ -52,7 +52,6 @@ class Config:
     quality: int = 80  # JPEG quality for non-IIIF downloads
 
     # IIIF Image API parameters
-    iiif_max_size: Optional[int] = None  # Max dimension in pixels (None = full size)
     iiif_quality: str = "default"  # IIIF quality: default, color, gray, bitonal
     iiif_format: str = "jpg"  # IIIF format: jpg, png, webp, tif
     iiif_region: str = "full"  # IIIF region parameter (usually 'full')
