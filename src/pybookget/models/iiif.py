@@ -9,6 +9,29 @@ from dataclasses import dataclass, field
 from typing import Any
 
 
+def label_text(value: Any) -> str | None:
+    """The text of a IIIF label or value in any of its shapes, or None.
+
+    v2: a string, a ``{"@value": ..., "@language": ...}`` object or a list of either;
+    v3: a language map ``{"en": [...], "none": [...]}``. Prefers English, then
+    ``none``, then any language; several values are joined with "; ".
+    """
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        texts = [t for t in (label_text(v) for v in value) if t]
+        return "; ".join(texts) or None
+    if isinstance(value, dict):
+        if "@value" in value:
+            return label_text(value["@value"])
+        for lang in ("en", "none", *value):
+            if value.get(lang):
+                return label_text(value[lang])
+    return None
+
+
 @dataclass
 class IIIFService:
     """IIIF Image Service information."""
@@ -83,7 +106,7 @@ class IIIFCanvas:
 
         return cls(
             id=data.get('@id', ''),
-            label=data.get('label', ''),
+            label=label_text(data.get('label')) or '',
             width=data.get('width'),
             height=data.get('height'),
             images=images,
@@ -102,7 +125,7 @@ class IIIFCanvas:
 
         return cls(
             id=data.get('id', ''),
-            label=data.get('label', {}).get('en', [''])[0] if isinstance(data.get('label', {}), dict) else data.get('label', ''),
+            label=label_text(data.get('label')) or '',
             width=data.get('width'),
             height=data.get('height'),
             images=images,
@@ -118,6 +141,8 @@ class IIIFManifestV2:
     description: str | None = None
     metadata: list[dict[str, Any]] = field(default_factory=list)
     canvases: list[IIIFCanvas] = field(default_factory=list)
+    rights: str | None = None  # v2 "license"
+    required_statement: str | None = None  # v2 "attribution"
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "IIIFManifestV2":
@@ -133,6 +158,8 @@ class IIIFManifestV2:
             description=data.get('description', ''),
             metadata=data.get('metadata', []),
             canvases=canvases,
+            rights=label_text(data.get('license')),
+            required_statement=label_text(data.get('attribution')),
         )
 
 
@@ -146,6 +173,8 @@ class IIIFManifestV3:
     summary: dict[str, list[str]] | None = None
     metadata: list[dict[str, Any]] = field(default_factory=list)
     items: list[IIIFCanvas] = field(default_factory=list)
+    rights: str | None = None
+    required_statement: str | None = None  # the value of "requiredStatement"
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "IIIFManifestV3":
@@ -161,6 +190,8 @@ class IIIFManifestV3:
             summary=data.get('summary'),
             metadata=data.get('metadata', []),
             items=items,
+            rights=data.get('rights'),
+            required_statement=label_text((data.get('requiredStatement') or {}).get('value')),
         )
 
     @property

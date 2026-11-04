@@ -30,6 +30,12 @@ uv sync
 uv add <package>
 ```
 
+The core dependencies (httpx, h2, tenacity, pyrate-limiter, tqdm, fake-useragent) cover the IIIF
+parser (`formats/iiif.py`, `models/iiif.py`) and the HTTP layer (`http/`), which other projects
+(linecaster) use as a library. The CLI and the handlers need the `[cli]` extra (click, url64,
+tldextract, rocrate); `pybookget.download_from_url` is imported lazily so `import pybookget` works
+without it. The dev group installs `pybookget[cli]`. Keep handler-only dependencies out of the core.
+
 ## Development Commands
 
 ```bash
@@ -89,7 +95,7 @@ pybookget/                 # Git repository root
 ├── pyproject.toml         # Package configuration (uv_build, dependency groups)
 ├── uv.lock                # Locked dependencies (uv)
 ├── .python-version        # 3.12
-├── tests/                 # pytest suite (test_ratelimit.py, test_download.py)
+├── tests/                 # pytest suite (test_ratelimit.py, test_download.py, test_iiif.py)
 └── src/                   # Source code (src layout)
     └── pybookget/         # Python package
         ├── __init__.py        # Package exports
@@ -143,24 +149,19 @@ Click-based command-line interface with commands:
 #### 4. **IIIF Handler** (`src/pybookget/handlers/iiif.py`)
 Universal IIIF Presentation API v2/v3 handler with advanced features:
 
-**Image API Version Detection:**
-- `_detect_image_api_version()`: Detects IIIF Image API version (v2 vs v3)
-- `_calculate_size_parameter()`: Returns version-appropriate full-size parameter
-  - IIIF Image API v3: Uses `"max"` (canonical)
-  - IIIF Image API v2: Uses `"full"` (canonical)
-- Always requests full resolution images
-
-**Fallback URL Mechanism:**
-- `_build_image_url_with_fallback()`: Returns (primary_url, fallback_url) tuples
-- Primary: IIIF URL with full-size parameters
-- Fallback: Direct image URL (used if IIIF params return 404)
-- Automatic retry in download manager on 404 errors
+The URL logic is public, in `formats/iiif.py`, so it can be used without a handler:
+- `image_api_version(service)`: IIIF Image API version (2 or 3; 2 when unknown)
+- `full_size_parameter(service)`: `"max"` for v3, `"full"` for v2 (always full resolution)
+- `image_url(image, config)`: (primary, fallback) — the Image API request built from the
+  `iiif_*` config, and the image's own URL (used if the request returns 404); without a service
+  the image's own URL only
+- `canvas_images(manifest, config)`: a `CanvasImage(index, canvas, image, url, fallback_url)` per
+  canvas with an image; `index` counts from 1 as the handlers number their files
 
 **Key Methods:**
 - `run()`: Main execution flow
 - `_extract_title()`: Handles v2/v3 label formats
-- `_extract_image_urls()`: Extracts images from canvases
-- `_build_image_url()`: Builds IIIF Image API URLs
+- `_extract_image_urls()`: (primary, fallback) pairs for canvases (via `image_url`; e-rara uses it)
 - `_download_images_with_fallback()`: Downloads with fallback support
 
 #### 5. **HTTP Layer** (`src/pybookget/http/`)
@@ -184,6 +185,12 @@ Universal IIIF Presentation API v2/v3 handler with advanced features:
   - Progress tracking with tqdm
   - **Fallback retry on 404**: Tries fallback_url if primary fails with 404
   - Tenacity retry logic for network errors
+
+**`client.fetch(client, url, config, headers=None, fallback_url=None)`**: GET with the retry
+policy below, returning the read `httpx.Response` (`response.url` says where the content came
+from); on 404 it fetches `fallback_url` instead. `download_file` uses it. Connections are not kept
+alive by default (`Config.max_keepalive_connections = 0`); bulk callers set it higher. `Config`
+creates no folders; handlers create theirs in `get_save_dir()`.
 
 **Retry Logic:**
 - Uses tenacity library for exponential backoff
@@ -442,7 +449,7 @@ Key dependencies (see `pyproject.toml`):
 - **httpx**: Async HTTP client with HTTP/2 support
 - **tenacity**: Retry logic with exponential backoff
 - **pyrate-limiter** (4.x): Async request rate limiting (`Config.rate_limits`)
-- **click**: CLI framework
+- **click** (`[cli]` extra): CLI framework
 - **tqdm**: Progress bars
 - **pydantic** (optional): May be used for validation in future
 
@@ -451,9 +458,8 @@ Key dependencies (see `pyproject.toml`):
 `tests/test_ratelimit.py` covers rate limiting (parsing, validation, shared limits, retries,
 proxies, repeated event loops, DownloadManager). `tests/test_download.py` covers the download
 manager and `download_file` (streaming, per-task results, retry policy, Retry-After, atomic
-writes, defaults). Still to be added:
-- Unit tests for parsers (IIIF manifest parsing)
-- Unit tests for URL builders (IIIF Image API URLs)
+writes, defaults). `tests/test_iiif.py` covers manifest parsing (v2/v3, labels, rights), page
+image URLs and `fetch` (retries, fallback on 404). Still to be added:
 - Integration tests for download manager
 - Mock-based tests for handlers
 - CLI tests with Click's testing utilities

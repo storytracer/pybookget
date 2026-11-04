@@ -31,7 +31,10 @@ uv sync
 # Run the CLI from the project environment
 uv run pybookget --help
 
-# Or install with pip (once published)
+# Or install with pip (once published): the CLI and the book handlers need the [cli] extra
+pip install "pybookget[cli]"
+
+# The library core alone (IIIF parsing and the HTTP layer, no CLI)
 pip install pybookget
 ```
 
@@ -126,6 +129,34 @@ async def download_all():
 # Run the async function
 results = asyncio.run(download_all())
 ```
+
+### Page Images of a Manifest
+
+`canvas_images()` turns a parsed manifest into the full-size URL of each page
+image (with its fallback), and `fetch()` gets one with pybookget's retries, rate
+limits and fallback on 404, returning the response instead of writing a file.
+Both need only the core install.
+
+```python
+import asyncio
+from pybookget.config import Config
+from pybookget.formats.iiif import canvas_images, parse_iiif_manifest
+from pybookget.http import create_client, fetch
+
+async def first_page(manifest_url):
+    config = Config(rate_limits=[(5, 1)], max_keepalive_connections=8)
+    async with create_client(config) as client:
+        manifest = parse_iiif_manifest((await fetch(client, manifest_url, config)).json())
+        page = canvas_images(manifest, config)[0]  # page.index, page.canvas, page.url, page.fallback_url
+        response = await fetch(client, page.url, config, fallback_url=page.fallback_url)
+        return response.content, str(response.url)
+
+asyncio.run(first_page("https://www.loc.gov/item/ltf90007547/manifest.json"))
+```
+
+Manifests also carry `rights` (v2 `license`, v3 `rights`) and
+`required_statement` (v2 `attribution`, v3 `requiredStatement`), and
+`pybookget.models.iiif.label_text()` reads any IIIF label shape.
 
 ### Direct httpx Usage
 
@@ -236,6 +267,7 @@ config = Config(
     header_file="headers.txt",        # Header file path
     proxy="http://proxy:8080",        # Proxy URL
     verify_ssl=True,                  # TLS certificate verification (default True)
+    max_keepalive_connections=0,      # 0 = a new connection per request; keep some for bulk runs
     quality=80,                       # JPEG quality
 
     # Rate limiting (pyrate-limiter): (requests, seconds) windows, all applied at once

@@ -824,18 +824,22 @@ wheels = [
 
 [[package]]
 name = "pybookget"
-version = "1.0.0"
+version = "1.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "click" },
     { name = "fake-useragent" },
     { name = "h2" },
     { name = "httpx" },
     { name = "pyrate-limiter" },
-    { name = "rocrate" },
     { name = "tenacity" },
-    { name = "tldextract" },
     { name = "tqdm" },
+]
+
+[package.optional-dependencies]
+cli = [
+    { name = "click" },
+    { name = "rocrate" },
+    { name = "tldextract" },
     { name = "url64" },
 ]
 
@@ -843,6 +847,7 @@ dependencies = [
 dev = [
     { name = "black" },
     { name = "mypy" },
+    { name = "pybookget", extra = ["cli"] },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ruff" },
@@ -850,22 +855,24 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "click", specifier = ">=8.0.0" },
+    { name = "click", marker = "extra == 'cli'", specifier = ">=8.0.0" },
     { name = "fake-useragent", specifier = ">=1.4.0" },
     { name = "h2", specifier = ">=4.1.0" },
     { name = "httpx", specifier = ">=0.25.0" },
     { name = "pyrate-limiter", specifier = ">=4.5,<5" },
-    { name = "rocrate", specifier = ">=0.9.0" },
+    { name = "rocrate", marker = "extra == 'cli'", specifier = ">=0.9.0" },
     { name = "tenacity", specifier = ">=8.2.0" },
-    { name = "tldextract", specifier = ">=5.0.0" },
+    { name = "tldextract", marker = "extra == 'cli'", specifier = ">=5.0.0" },
     { name = "tqdm", specifier = ">=4.65.0" },
-    { name = "url64", specifier = ">=0.1.0" },
+    { name = "url64", marker = "extra == 'cli'", specifier = ">=0.1.0" },
 ]
+provides-extras = ["cli"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "black", specifier = ">=23.0.0" },
     { name = "mypy", specifier = ">=1.0.0" },
+    { name = "pybookget", extras = ["cli"] },
     { name = "pytest", specifier = ">=8" },
     { name = "pytest-cov", specifier = ">=4.0.0" },
     { name = "ruff", specifier = ">=0.1.0" },

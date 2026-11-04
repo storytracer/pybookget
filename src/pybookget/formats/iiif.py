@@ -5,15 +5,24 @@ This module provides parsing capabilities for IIIF Presentation API manifests,
 supporting both version 2 and version 3 of the specification.
 
 The parser auto-detects the version and returns the appropriate data model.
+``canvas_images()`` turns a parsed manifest into the URLs of its page images.
 """
 
+import logging
+from dataclasses import dataclass
 from typing import Any
 
+from pybookget.config import Config
 from pybookget.formats.base import VersionedParser
 from pybookget.models.iiif import (
+    IIIFCanvas,
+    IIIFImage,
     IIIFManifestV2,
     IIIFManifestV3,
+    IIIFService,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class IIIFParser(VersionedParser[dict[str, Any], IIIFManifestV2 | IIIFManifestV3]):
@@ -244,3 +253,85 @@ def parse_iiif_manifest(data: dict[str, Any]) -> IIIFManifestV2 | IIIFManifestV3
     """
     parser = IIIFParser()
     return parser.parse(data)
+
+
+# --- page images --------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class CanvasImage:
+    """The image of one canvas, as pybookget downloads it.
+
+    ``url`` is the IIIF Image API request for the full image (or the image's own
+    URL when it has no image service); ``fallback_url`` is the image's own URL,
+    tried when the Image API request returns 404. ``index`` counts the canvases
+    that have an image, from 1, as the handlers number the files they save.
+    """
+
+    index: int
+    canvas: IIIFCanvas
+    image: IIIFImage
+    url: str
+    fallback_url: str | None = None
+
+
+def image_api_version(service: IIIFService | None) -> int:
+    """The IIIF Image API version (2 or 3) of an image service; 2 when unknown."""
+    if not service:
+        return 2
+    if service.type:
+        if "ImageService3" in service.type:
+            return 3
+        if "ImageService2" in service.type:
+            return 2
+    if service.context:
+        if "/image/3/" in service.context:
+            return 3
+        if "/image/2/" in service.context:
+            return 2
+    if service.profile:
+        profile = service.profile if isinstance(service.profile, str) else str(service.profile)
+        if "/image/3/" in profile:
+            return 3
+        if "/image/2/" in profile or "/image/1/" in profile:
+            return 2
+    logger.debug("Unable to detect IIIF Image API version, defaulting to v2")
+    return 2
+
+
+def full_size_parameter(service: IIIFService | None) -> str:
+    """The canonical full-size parameter: ``max`` for Image API v3, ``full`` for v2."""
+    return "max" if image_api_version(service) == 3 else "full"
+
+
+def image_url(image: IIIFImage, config: Config) -> tuple[str, str | None]:
+    """The (primary, fallback) URLs for downloading an image at full size.
+
+    With an image service, the primary URL is the Image API request
+    ``{service}/{region}/{size}/{rotation}/{quality}.{format}`` built from the
+    config's ``iiif_*`` parameters, and the fallback is the image's own URL.
+    Without a service, the image's own URL is the only one.
+    """
+    if not image.service:
+        return image.id, None
+    url = (
+        f"{image.service.id.rstrip('/')}/"
+        f"{config.iiif_region}/"
+        f"{full_size_parameter(image.service)}/"
+        f"{config.iiif_rotation}/"
+        f"{config.iiif_quality}.{config.iiif_format}"
+    )
+    return url, image.id or None
+
+
+def canvas_images(manifest: IIIFManifestV2 | IIIFManifestV3, config: Config) -> list[CanvasImage]:
+    """One CanvasImage per canvas that has an image (its first one), in manifest order."""
+    images = []
+    for canvas in manifest.canvases:
+        if not canvas.images:
+            continue
+        image = canvas.images[0]
+        url, fallback = image_url(image, config)
+        if url:
+            images.append(CanvasImage(len(images) + 1, canvas, image, url, fallback))
+    return images

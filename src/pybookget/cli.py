@@ -4,7 +4,10 @@ import asyncio
 import logging
 import sys
 
-import click
+try:
+    import click
+except ImportError as e:  # the core install has no CLI
+    raise SystemExit("The pybookget CLI needs its extra: pip install 'pybookget[cli]'") from e
 
 from pybookget import __version__
 from pybookget.config import Config

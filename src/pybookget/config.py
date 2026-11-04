@@ -40,6 +40,9 @@ class Config:
     )
     proxy: str | None = None
     verify_ssl: bool = True  # Verify TLS certificates (disable with --no-ssl-verify)
+    # Idle connections kept open for reuse; 0 opens a new connection for every request.
+    # Keeping some (e.g. 16) saves a TLS handshake per file in bulk downloads from one server.
+    max_keepalive_connections: int = 0
 
     # Retry settings (using tenacity)
     max_retries: int = 3  # Maximum number of retry attempts
@@ -101,9 +104,6 @@ class Config:
         # Setup proxy from environment if not specified
         if not self.proxy:
             self.proxy = os.environ.get('HTTPS_PROXY') or os.environ.get('HTTP_PROXY')
-
-        # Ensure download directory exists
-        Path(self.download_dir).mkdir(parents=True, exist_ok=True)
 
     def _parse_page_range(self) -> None:
         """Parse page range from format '4:434' to start and end integers."""

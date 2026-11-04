@@ -9,6 +9,7 @@ retry behavior.
 """
 
 import asyncio
+import logging
 import os
 import tempfile
 from datetime import UTC, datetime
@@ -16,7 +17,6 @@ from email.utils import parsedate_to_datetime
 from pathlib import Path
 
 import httpx
-from fake_useragent import UserAgent
 from tenacity import (
     RetryCallState,
     retry,
@@ -30,6 +30,8 @@ from pybookget.config import Config
 from pybookget.http.cookies import load_cookies_from_file
 from pybookget.http.headers import load_headers_from_file
 from pybookget.http.ratelimit import wait_for_rate_limit
+
+logger = logging.getLogger(__name__)
 
 
 def create_client(
@@ -55,6 +57,8 @@ def create_client(
     # Build headers with user agent
     if config.use_fake_user_agent:
         # Generate random user agent for request masking
+        from fake_useragent import UserAgent
+
         ua = UserAgent()
         user_agent = ua.random
     else:
@@ -83,8 +87,8 @@ def create_client(
 
         event_hooks["request"] = [_wait_for_rate_limit]
 
-    # Create async client with configuration
-    # Disable connection pooling to ensure new connections for each request
+    # Create async client with configuration. By default connections are not kept
+    # alive, so every request opens a new one (config.max_keepalive_connections)
     return httpx.AsyncClient(
         headers=headers,
         cookies=cookies,
@@ -93,7 +97,7 @@ def create_client(
         follow_redirects=True,
         http2=True,
         proxy=config.proxy,
-        limits=httpx.Limits(max_keepalive_connections=0),
+        limits=httpx.Limits(max_keepalive_connections=config.max_keepalive_connections),
         event_hooks=event_hooks,
         transport=transport,
     )
@@ -214,26 +218,47 @@ async def download_file(
     # Ensure parent directory exists
     dest_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Create retry decorator from config
-    retry_decorator = create_retry_decorator(config)
-
-    # Define async download function with retry logic
-    @retry_decorator
-    async def _download_with_retry():
-        # Download entire file into memory first, then write to disk
-        # This ensures atomic writes - file only exists if fully downloaded
-        response = await client.get(url, headers=headers)
-        response.raise_for_status()
-        return response.content
-
-    # Execute download with retries
-    content = await _download_with_retry()
+    # Download the entire file into memory first (with retries), then write it to disk
+    content = (await fetch(client, url, config, headers=headers)).content
 
     # Write complete file to disk atomically (temporary file, then rename), in a
     # thread so disk I/O never stalls the other downloads on the event loop
     await asyncio.to_thread(write_atomically, dest_path, content)
 
     return dest_path
+
+
+async def fetch(
+    client: httpx.AsyncClient,
+    url: str,
+    config: Config,
+    headers: dict[str, str] | None = None,
+    fallback_url: str | None = None,
+) -> httpx.Response:
+    """GET ``url`` with tenacity retry logic and return the (read) response.
+
+    Retries what ``is_retryable`` accepts, as ``download_file`` does. If the URL
+    returns 404 and there is a ``fallback_url``, that is fetched instead (with
+    its own retries). ``response.url`` says which URL, after redirects, the
+    content came from.
+
+    Raises:
+        httpx.HTTPError: If the request (and the fallback) fails after all retries
+    """
+
+    @create_retry_decorator(config)
+    async def _get(u: str) -> httpx.Response:
+        response = await client.get(u, headers=headers)
+        response.raise_for_status()
+        return response
+
+    try:
+        return await _get(url)
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code != 404 or not fallback_url:
+            raise
+        logger.warning(f"Primary URL returned 404, trying fallback: {fallback_url}")
+        return await _get(fallback_url)
 
 
 def write_atomically(dest_path: Path, content: bytes) -> None:
