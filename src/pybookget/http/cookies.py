@@ -5,10 +5,9 @@ Supports Netscape cookie file format used by browsers and tools like curl.
 
 from http.cookiejar import Cookie
 from pathlib import Path
-from typing import List
 
 
-def load_cookies_from_file(cookie_file: str) -> List[Cookie]:
+def load_cookies_from_file(cookie_file: str) -> list[Cookie]:
     """Load cookies from Netscape cookie file format.
 
     The Netscape cookie format is:
@@ -30,7 +29,7 @@ def load_cookies_from_file(cookie_file: str) -> List[Cookie]:
     if not cookie_path.exists():
         return cookies
 
-    with open(cookie_path, 'r') as f:
+    with open(cookie_path) as f:
         for line in f:
             line = line.strip()
 

@@ -12,4 +12,4 @@ Available handlers:
 # This ensures handlers are registered when the module is imported
 from pybookget.handlers import erara, iiif
 
-__all__ = ["iiif", "erara"]
+__all__ = ["erara", "iiif"]

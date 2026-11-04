@@ -6,7 +6,7 @@ For parsing IIIF manifests, use pybookget.formats.iiif.IIIFParser.
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 
 @dataclass
@@ -14,12 +14,12 @@ class IIIFService:
     """IIIF Image Service information."""
 
     id: str
-    type: Optional[str] = None
-    profile: Optional[str] = None
-    context: Optional[str] = None
+    type: str | None = None
+    profile: str | None = None
+    context: str | None = None
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "IIIFService":
+    def from_dict(cls, data: dict[str, Any]) -> "IIIFService":
         """Create IIIFService from dictionary."""
         return cls(
             id=data.get('@id') or data.get('id', ''),
@@ -34,14 +34,14 @@ class IIIFImage:
     """IIIF Image resource."""
 
     id: str
-    type: Optional[str] = None
-    format: Optional[str] = None
-    width: Optional[int] = None
-    height: Optional[int] = None
-    service: Optional[IIIFService] = None
+    type: str | None = None
+    format: str | None = None
+    width: int | None = None
+    height: int | None = None
+    service: IIIFService | None = None
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "IIIFImage":
+    def from_dict(cls, data: dict[str, Any]) -> "IIIFImage":
         """Create IIIFImage from dictionary."""
         # Handle service - can be dict or list
         service_data = data.get('service')
@@ -67,13 +67,13 @@ class IIIFCanvas:
     """IIIF Canvas (page) information."""
 
     id: str
-    label: Optional[str] = None
-    width: Optional[int] = None
-    height: Optional[int] = None
-    images: List[IIIFImage] = field(default_factory=list)
+    label: str | None = None
+    width: int | None = None
+    height: int | None = None
+    images: list[IIIFImage] = field(default_factory=list)
 
     @classmethod
-    def from_dict_v2(cls, data: Dict[str, Any]) -> "IIIFCanvas":
+    def from_dict_v2(cls, data: dict[str, Any]) -> "IIIFCanvas":
         """Create IIIFCanvas from IIIF v2 dictionary."""
         images = []
         for img_data in data.get('images', []):
@@ -90,7 +90,7 @@ class IIIFCanvas:
         )
 
     @classmethod
-    def from_dict_v3(cls, data: Dict[str, Any]) -> "IIIFCanvas":
+    def from_dict_v3(cls, data: dict[str, Any]) -> "IIIFCanvas":
         """Create IIIFCanvas from IIIF v3 dictionary."""
         images = []
         # V3 structure: canvas.items[].items[].body
@@ -114,13 +114,13 @@ class IIIFManifestV2:
     """IIIF Presentation API v2 Manifest."""
 
     id: str
-    label: Optional[str] = None
-    description: Optional[str] = None
-    metadata: List[Dict[str, Any]] = field(default_factory=list)
-    canvases: List[IIIFCanvas] = field(default_factory=list)
+    label: str | None = None
+    description: str | None = None
+    metadata: list[dict[str, Any]] = field(default_factory=list)
+    canvases: list[IIIFCanvas] = field(default_factory=list)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "IIIFManifestV2":
+    def from_dict(cls, data: dict[str, Any]) -> "IIIFManifestV2":
         """Create IIIFManifestV2 from dictionary."""
         canvases = []
         for sequence in data.get('sequences', []):
@@ -142,13 +142,13 @@ class IIIFManifestV3:
 
     id: str
     type: str
-    label: Optional[Dict[str, List[str]]] = None
-    summary: Optional[Dict[str, List[str]]] = None
-    metadata: List[Dict[str, Any]] = field(default_factory=list)
-    items: List[IIIFCanvas] = field(default_factory=list)
+    label: dict[str, list[str]] | None = None
+    summary: dict[str, list[str]] | None = None
+    metadata: list[dict[str, Any]] = field(default_factory=list)
+    items: list[IIIFCanvas] = field(default_factory=list)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "IIIFManifestV3":
+    def from_dict(cls, data: dict[str, Any]) -> "IIIFManifestV3":
         """Create IIIFManifestV3 from dictionary."""
         items = []
         for canvas_data in data.get('items', []):
@@ -164,7 +164,7 @@ class IIIFManifestV3:
         )
 
     @property
-    def canvases(self) -> List[IIIFCanvas]:
+    def canvases(self) -> list[IIIFCanvas]:
         """Alias for items to match v2 API."""
         return self.items
 

@@ -1,9 +1,9 @@
 """Configuration management for pybookget."""
 
 import os
+import weakref
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, Tuple
 
 
 @dataclass
@@ -16,16 +16,16 @@ class Config:
 
     # Download paths
     download_dir: str = "./downloads"
-    cookie_file: Optional[str] = None
-    header_file: Optional[str] = None
+    cookie_file: str | None = None
+    header_file: str | None = None
 
     # Page and volume ranges
-    page_range: Optional[str] = None  # Format: "4:434"
-    page_start: Optional[int] = None
-    page_end: Optional[int] = None
-    volume_range: Optional[str] = None
-    volume_start: Optional[int] = None
-    volume_end: Optional[int] = None
+    page_range: str | None = None  # Format: "4:434"
+    page_start: int | None = None
+    page_end: int | None = None
+    volume_range: str | None = None
+    volume_start: int | None = None
+    volume_end: int | None = None
 
     # Concurrency settings
     max_concurrent_tasks: int = 16  # Number of concurrent book downloads
@@ -38,14 +38,15 @@ class Config:
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
         "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     )
-    proxy: Optional[str] = None
-    verify_ssl: bool = False  # Match Go's InsecureSkipVerify
+    proxy: str | None = None
+    verify_ssl: bool = True  # Verify TLS certificates (disable with --no-ssl-verify)
 
     # Retry settings (using tenacity)
     max_retries: int = 3  # Maximum number of retry attempts
     retry_wait_min: float = 1.0  # Minimum wait between retries (seconds)
     retry_wait_max: float = 10.0  # Maximum wait between retries (seconds)
     retry_multiplier: float = 2.0  # Exponential backoff multiplier
+    retry_after_max: float = 300.0  # Longest Retry-After (seconds) honoured from a 429/503
 
     # Download settings
     use_dzi: bool = True  # Use DeepZoom/IIIF tiles
@@ -60,6 +61,11 @@ class Config:
 
     # Rate limiting
     sleep_interval: int = 0  # Seconds between downloads
+    # Request rate limits shared by every HTTP client created from this config, as
+    # (requests, seconds) windows that all apply at once, e.g. [(10, 1), (80, 10), (400, 60)]
+    # allows at most 10 requests per second, 80 per 10 seconds and 400 per minute.
+    # None means unlimited. Enforced by pyrate-limiter (see pybookget.http.ratelimit).
+    rate_limits: list[tuple[int, float]] | None = None
 
     # Downloader mode
     downloader_mode: int = 0  # 0=default, 1=batch image, 2=IIIF
@@ -71,8 +77,19 @@ class Config:
     skip_images: bool = False  # Skip image downloads (metadata always downloaded)
     skip_ocr: bool = False  # Skip OCR downloads (metadata always downloaded)
 
+    # One shared limiter per event loop, created on first use (asyncio locks are bound to a loop)
+    _limiters: "weakref.WeakKeyDictionary" = field(
+        default_factory=weakref.WeakKeyDictionary, init=False, repr=False, compare=False
+    )
+
     def __post_init__(self):
         """Initialize and validate configuration."""
+        if self.rate_limits is not None:
+            from pybookget.http.ratelimit import to_rates  # validates; raises ValueError
+
+            self.rate_limits = [(int(n), float(s)) for n, s in self.rate_limits]
+            to_rates(self.rate_limits)
+
         # Parse page range if provided
         if self.page_range:
             self._parse_page_range()

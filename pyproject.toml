@@ -1,14 +1,15 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["uv_build>=0.13.6,<0.14.0"]
+build-backend = "uv_build"
 
 [project]
 name = "pybookget"
 version = "1.0.0"
 description = "A Python tool for downloading digital books from 50+ academic libraries"
 readme = "README.md"
-requires-python = ">=3.8"
-license = {text = "GPL-3.0"}
+requires-python = ">=3.12"
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
     {name = "Sebastian Majstorovic", email = "storytracer@gmail.com"},
 ]
@@ -17,12 +18,7 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
@@ -34,19 +30,11 @@ dependencies = [
     "tqdm>=4.65.0",
     "h2>=4.1.0",  # HTTP/2 support for httpx
     "tenacity>=8.2.0",  # Retry management
+    "pyrate-limiter>=4.5,<5",  # Request rate limiting (async); 4.x API
     "url64>=0.1.0",  # URL-safe base64 encoding
     "tldextract>=5.0.0",  # Extract root domain from URLs
     "fake-useragent>=1.4.0",  # Random user agent generation
     "rocrate>=0.9.0",  # RO-Crate metadata serialization
-]
-
-[project.optional-dependencies]
-dev = [
-    "pytest>=7.0.0",
-    "pytest-cov>=4.0.0",
-    "black>=23.0.0",
-    "mypy>=1.0.0",
-    "ruff>=0.1.0",
 ]
 
 [project.urls]
@@ -57,22 +45,29 @@ Issues = "https://github.com/storytracer/pybookget/issues"
 [project.scripts]
 pybookget = "pybookget.cli:main"
 
-[tool.setuptools]
-package-dir = {"" = "src"}
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "mypy>=1.0.0",
+    "ruff>=0.1.0",
+]
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[tool.uv]
+# an older uv may not read a lockfile written by a newer one
+required-version = ">=0.13.6"
 
 [tool.black]
 line-length = 100
-target-version = ['py38', 'py39', 'py310', 'py311']
+target-version = ['py312']
 
 [tool.ruff]
 line-length = 100
-target-version = "py38"
+target-version = "py312"
 
 [tool.mypy]
-python_version = "3.8"
+python_version = "3.12"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false

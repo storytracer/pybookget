@@ -3,7 +3,6 @@
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Dict, List, Optional
 
 import httpx
 
@@ -41,10 +40,10 @@ class BaseHandler(ABC):
         """
         self.url = url
         self.config = config
-        self.client: Optional[httpx.AsyncClient] = None
-        self.book_id: Optional[str] = None
+        self.client: httpx.AsyncClient | None = None
+        self.book_id: str | None = None
         self.title: str = "unknown"
-        self.volume_id: Optional[str] = None
+        self.volume_id: str | None = None
 
     def _ensure_client(self) -> httpx.AsyncClient:
         """Ensure httpx client is created (lazy initialization).
@@ -57,7 +56,7 @@ class BaseHandler(ABC):
         return self.client
 
     @abstractmethod
-    async def run(self) -> Dict[str, any]:
+    async def run(self) -> dict[str, any]:
         """Execute the download process.
 
         This is the main entry point for each handler. It should:
@@ -78,9 +77,8 @@ class BaseHandler(ABC):
                 "save_path": Path_to_downloads,
             }
         """
-        pass
 
-    def get_book_id(self, pattern: Optional[str] = None) -> str:
+    def get_book_id(self, pattern: str | None = None) -> str:
         """Extract book ID from URL.
 
         Args:
@@ -153,11 +151,11 @@ class BaseHandler(ABC):
 
     def create_download_tasks(
         self,
-        image_urls: List[str],
-        save_dir: Optional[Path] = None,
-        extension: Optional[str] = None,
+        image_urls: list[str],
+        save_dir: Path | None = None,
+        extension: str | None = None,
         start_index: int = 1,
-    ) -> List[DownloadTask]:
+    ) -> list[DownloadTask]:
         """Create download tasks from list of image URLs.
 
         Args:
@@ -198,9 +196,9 @@ class BaseHandler(ABC):
 
     async def download_images(
         self,
-        image_urls: List[str],
-        save_dir: Optional[Path] = None,
-        extension: Optional[str] = None,
+        image_urls: list[str],
+        save_dir: Path | None = None,
+        extension: str | None = None,
         start_index: int = 1,
     ) -> int:
         """Download images using the download manager.
@@ -253,8 +251,8 @@ class BaseHandler(ABC):
         self,
         total_pages: int,
         downloaded: int,
-        error: Optional[str] = None,
-    ) -> Dict[str, any]:
+        error: str | None = None,
+    ) -> dict[str, any]:
         """Create standardized result dictionary.
 
         Args:

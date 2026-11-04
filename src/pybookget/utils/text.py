@@ -1,14 +1,13 @@
 """Text and URL parsing utilities."""
 
 import re
-from typing import Optional, Tuple
 from urllib.parse import urlparse
 
 import tldextract
 import url64
 
 
-def extract_between(text: str, start: str, end: str) -> Optional[str]:
+def extract_between(text: str, start: str, end: str) -> str | None:
     """Extract text between two markers.
 
     Args:
@@ -66,7 +65,7 @@ def get_host_url(url: str) -> str:
     return f"{parsed.scheme}://{parsed.netloc}"
 
 
-def parse_url_pattern(pattern: str) -> Tuple[str, Optional[str]]:
+def parse_url_pattern(pattern: str) -> tuple[str, str | None]:
     """Parse URL pattern with placeholders like [PAGE], [VOL], etc.
 
     Args:
@@ -105,7 +104,7 @@ def format_url_pattern(
     return pattern.replace(f'[{placeholder}]', formatted_value)
 
 
-def extract_id_from_url(url: str, pattern: Optional[str] = None) -> Optional[str]:
+def extract_id_from_url(url: str, pattern: str | None = None) -> str | None:
     """Extract ID from URL using regex pattern.
 
     Args:
@@ -125,7 +124,7 @@ def extract_id_from_url(url: str, pattern: Optional[str] = None) -> Optional[str
     return path_parts[-1] if path_parts else None
 
 
-def parse_range_string(range_str: str) -> Tuple[int, int]:
+def parse_range_string(range_str: str) -> tuple[int, int]:
     """Parse range string like '1-100' or '4:434'.
 
     Args:

@@ -3,15 +3,13 @@
 import asyncio
 import logging
 import sys
-from pathlib import Path
-from typing import Optional
 
 import click
 
 from pybookget import __version__
 from pybookget.config import Config
-from pybookget.router.registry import download_from_url, HandlerRegistry
-
+from pybookget.http.ratelimit import parse_rate_limit
+from pybookget.router.registry import HandlerRegistry, download_from_url
 
 # Setup logging - default to WARNING to avoid interfering with progress bars
 # INFO and DEBUG logs are only shown when --verbose is used
@@ -41,6 +39,21 @@ def cli(ctx, version):
         click.echo(ctx.get_help())
 
 
+def _parse_rate_limits(ctx, param, values):
+    """Click callback: turn ('10/1', '400/60') into [(10, 1.0), (400, 60.0)] or None."""
+    try:
+        return [parse_rate_limit(v) for v in values] or None
+    except ValueError as e:
+        raise click.BadParameter(str(e))
+
+
+rate_limit_option = click.option(
+    '--rate-limit', 'rate_limits', multiple=True, callback=_parse_rate_limits,
+    metavar='REQUESTS/SECONDS',
+    help='Limit requests across all downloads, e.g. 10/1 (repeatable: --rate-limit 10/1 --rate-limit 400/60)',
+)
+
+
 @cli.command()
 @click.argument('url')
 @click.option('--handler', '-h', default='iiif', help='Handler to use (default: iiif)')
@@ -64,23 +77,24 @@ def cli(ctx, version):
 @click.option('--iiif-format', default='jpg', help='IIIF format: jpg, png, webp, tif')
 @click.option('--skip-images', is_flag=True, help='Skip image downloads (metadata always downloaded)')
 @click.option('--skip-ocr', is_flag=True, help='Skip OCR downloads (metadata always downloaded)')
+@rate_limit_option
 @click.option('--verbose', is_flag=True, help='Enable verbose logging')
 def download(
     url: str,
     handler: str,
     output: str,
-    pages: Optional[str],
-    volume: Optional[str],
+    pages: str | None,
+    volume: str | None,
     threads: int,
     concurrent: int,
     timeout: int,
     max_retries: int,
     retry_wait_min: float,
     retry_wait_max: float,
-    cookie_file: Optional[str],
-    header_file: Optional[str],
-    proxy: Optional[str],
-    user_agent: Optional[str],
+    cookie_file: str | None,
+    header_file: str | None,
+    proxy: str | None,
+    user_agent: str | None,
     no_fake_user_agent: bool,
     no_ssl_verify: bool,
     quality: int,
@@ -88,6 +102,7 @@ def download(
     iiif_format: str,
     skip_images: bool,
     skip_ocr: bool,
+    rate_limits: list[tuple[int, float]] | None,
     verbose: bool,
 ):
     """Download a book from a URL.
@@ -122,6 +137,7 @@ def download(
         iiif_format=iiif_format,
         skip_images=skip_images,
         skip_ocr=skip_ocr,
+        rate_limits=rate_limits,
     )
 
     if user_agent:
@@ -136,7 +152,7 @@ def download(
     result = asyncio.run(download_from_url(url, config, handler=handler))
 
     if result and result.get('success'):
-        click.echo(f"\n✓ Success!")
+        click.echo("\n✓ Success!")
         click.echo(f"  Title: {result['title']}")
         click.echo(f"  Downloaded: {result['downloaded']}/{result['total_pages']} pages")
         click.echo(f"  Location: {result['save_path']}")
@@ -152,6 +168,7 @@ def download(
 @click.option('--output', '-o', default='./downloads', help='Output directory')
 @click.option('--concurrent', '-c', default=4, help='Max concurrent books')
 @click.option('--threads', '-t', default=1, help='Threads per download task')
+@rate_limit_option
 @click.option('--verbose', is_flag=True, help='Enable verbose logging')
 def batch(
     file: str,
@@ -159,6 +176,7 @@ def batch(
     output: str,
     concurrent: int,
     threads: int,
+    rate_limits: list[tuple[int, float]] | None,
     verbose: bool,
 ):
     """Download multiple books from a file containing URLs.
@@ -176,7 +194,7 @@ def batch(
 
     # Read URLs from file
     urls = []
-    with open(file, 'r') as f:
+    with open(file) as f:
         for line in f:
             line = line.strip()
             if line and not line.startswith('#'):
@@ -194,6 +212,7 @@ def batch(
         download_dir=output,
         max_concurrent_tasks=concurrent,
         threads_per_task=threads,
+        rate_limits=rate_limits,
     )
 
     # Download each URL

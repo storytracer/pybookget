@@ -21,10 +21,15 @@ A Python tool for downloading IIIF-compliant digital books from academic librari
 
 ## Installation
 
+Requires Python 3.12 or newer. The project is managed with [uv](https://docs.astral.sh/uv/).
+
 ```bash
-# Install from source
+# Install from source (creates .venv from uv.lock)
 cd pybookget
-pip install -e .
+uv sync
+
+# Run the CLI from the project environment
+uv run pybookget --help
 
 # Or install with pip (once published)
 pip install pybookget
@@ -200,6 +205,7 @@ For libraries with custom APIs or non-IIIF formats, you can easily add custom ha
 --quality             JPEG quality 1-100 (default: 80)
 --iiif-quality        IIIF quality: default, color, gray, bitonal (default: default)
 --iiif-format         IIIF format: jpg, png, webp, tif (default: jpg)
+--rate-limit          Limit requests as REQUESTS/SECONDS, e.g. 10/1 (repeatable)
 --verbose             Enable verbose logging
 ```
 
@@ -229,10 +235,32 @@ config = Config(
     cookie_file="cookies.txt",        # Cookie file path
     header_file="headers.txt",        # Header file path
     proxy="http://proxy:8080",        # Proxy URL
-    verify_ssl=False,                 # SSL verification
+    verify_ssl=True,                  # TLS certificate verification (default True)
     quality=80,                       # JPEG quality
+
+    # Rate limiting (pyrate-limiter): (requests, seconds) windows, all applied at once
+    rate_limits=[(10, 1), (80, 10), (400, 60)],
 )
 ```
+
+## Rate Limiting
+
+`rate_limits` caps the request rate of everything that shares one `Config`: all
+HTTP clients pybookget creates from it, all concurrent downloads, manifest
+requests, retries and fallback URLs. Each window is `(requests, seconds)`, and
+all windows apply at once, so `[(10, 1), (80, 10), (400, 60)]` allows at most 10
+requests per second, 80 per 10 seconds and 400 per minute. Requests that would
+exceed a window wait (asynchronously) until a slot is free.
+
+```bash
+pybookget download "URL" --rate-limit 10/1 --rate-limit 80/10 --rate-limit 400/60
+```
+
+The limit is enforced with [pyrate-limiter](https://github.com/vutran1710/PyrateLimiter)
+through an httpx request hook, so it also applies when requests go through a
+proxy. Windows that contradict each other (e.g. a longer window allowing fewer
+requests than a shorter one) are rejected when the `Config` is created. The
+default is no limit.
 
 ## Retry Logic (Tenacity)
 
@@ -243,7 +271,8 @@ pybookget uses [tenacity](https://tenacity.readthedocs.io/) for robust retry man
 - **Automatic Retries**: Failed downloads are automatically retried
 - **Exponential Backoff**: Wait time doubles after each retry (1s, 2s, 4s, 8s...)
 - **Configurable**: Adjust max retries, min/max wait times via config
-- **Smart**: Only retries on network/HTTP errors, not on other exceptions
+- **Smart**: Only retries errors that can go away (see below); a 404 fails at once
+- **Polite**: Honours the server's `Retry-After` header on 429/503 (up to `retry_after_max`, default 300 s)
 
 ### Retry Configuration
 
@@ -269,11 +298,44 @@ pybookget download URL \
 ### What Gets Retried
 
 Retries are triggered for:
-- `httpx.HTTPError` - HTTP errors (4xx, 5xx)
-- `httpx.TimeoutException` - Request timeouts
-- `httpx.NetworkError` - Network connectivity issues
+- HTTP 408, 425, 429, 500, 502, 503 and 504 (busy, overloaded or briefly failing servers)
+- `httpx.TransportError` - timeouts, connection and proxy errors, broken connections
 
-After all retries are exhausted, the file is marked as failed and skipped.
+Other HTTP errors (404, 403, 410, ...) are final and are not retried; a 404 still
+tries the task's `fallback_url` if it has one. The wait before a retry is the
+exponential backoff, or the server's `Retry-After` if that is longer.
+
+After all retries are exhausted, the file is marked as failed (`task.error` says
+why) and skipped.
+
+## Bulk Downloads
+
+`DownloadManager.run()` streams tasks from any iterable or async iterable (for
+example a generator over a page list) with `max_workers` concurrent downloads.
+Only a small bounded queue of tasks is held in memory, so millions of files are
+fine. The callback gets each task with its own result.
+
+```python
+from pybookget.http.download import DownloadManager, DownloadTask
+
+def tasks():
+    for line in open("pages.tsv"):
+        url, path = line.rstrip("\n").split("\t")
+        yield DownloadTask(url=url, save_path=path)
+
+def log_failure(task, success):
+    if not success:
+        print(task.url, task.error)
+
+config = Config(rate_limits=[(10, 1)], proxy="http://proxy:8080")
+dm = DownloadManager(config, max_workers=8)
+stats = await dm.run(tasks(), callback=log_failure)
+print(stats.successful, stats.skipped, stats.failed)
+```
+
+Files are written atomically: each download goes to a hidden temporary file in
+the target directory and is renamed into place once complete, so an interrupted
+run never leaves a truncated file that the next run would skip as done.
 
 ## IIIF Features
 
@@ -460,20 +522,20 @@ pybookget/
 ## Development
 
 ```bash
-# Install development dependencies
-pip install -e ".[dev]"
+# Install the project and its development dependencies (dev group)
+uv sync
 
 # Run tests
-pytest
+uv run pytest
 
 # Format code
-black pybookget/
+uv run black src/pybookget/
 
 # Type checking
-mypy pybookget/
+uv run mypy src/pybookget/
 
 # Linting
-ruff check pybookget/
+uv run ruff check src/pybookget/
 ```
 
 ## Migrated from Go
@@ -489,7 +551,7 @@ This is a Python rewrite of the original [bookget](https://github.com/deweizhu/b
 
 ## License
 
-GPL-3.0 License - see LICENSE file for details.
+MIT License - see LICENSE file for details.
 
 ## Contributing
 

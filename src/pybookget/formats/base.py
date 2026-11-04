@@ -6,15 +6,14 @@ This module defines the interfaces that all format handlers must implement.
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Dict, Generic, Optional, TypeVar
-
+from typing import TypeVar
 
 # Type variables for generic parsers/writers
 T = TypeVar('T')  # Input type (e.g., str, dict, bytes)
 R = TypeVar('R')  # Result type (e.g., parsed data model)
 
 
-class MetadataParser(ABC, Generic[T, R]):
+class MetadataParser[T, R](ABC):
     """Abstract base class for metadata format parsers.
 
     Parsers convert raw metadata (XML, JSON, etc.) into structured data models.
@@ -43,7 +42,6 @@ class MetadataParser(ABC, Generic[T, R]):
         Raises:
             ValueError: If data format is invalid or cannot be parsed
         """
-        pass
 
     @abstractmethod
     def validate(self, data: T) -> bool:
@@ -55,22 +53,19 @@ class MetadataParser(ABC, Generic[T, R]):
         Returns:
             True if data is valid, False otherwise
         """
-        pass
 
     @property
     @abstractmethod
     def format_name(self) -> str:
         """Return human-readable name of the format (e.g., 'IIIF v2', 'METS')."""
-        pass
 
     @property
     @abstractmethod
     def mime_types(self) -> list[str]:
         """Return supported MIME types for this format."""
-        pass
 
 
-class MetadataWriter(ABC, Generic[T]):
+class MetadataWriter[T](ABC):
     """Abstract base class for metadata format writers.
 
     Writers serialize structured data into standard metadata formats.
@@ -98,7 +93,6 @@ class MetadataWriter(ABC, Generic[T]):
             IOError: If file cannot be written
             ValueError: If data cannot be serialized
         """
-        pass
 
     @abstractmethod
     def to_string(self, data: T, **options) -> str:
@@ -114,7 +108,6 @@ class MetadataWriter(ABC, Generic[T]):
         Raises:
             ValueError: If data cannot be serialized
         """
-        pass
 
     @abstractmethod
     def validate_output(self, data: T) -> bool:
@@ -126,19 +119,16 @@ class MetadataWriter(ABC, Generic[T]):
         Returns:
             True if data is valid for this format, False otherwise
         """
-        pass
 
     @property
     @abstractmethod
     def format_name(self) -> str:
         """Return human-readable name of the format (e.g., 'RO-Crate', 'Dublin Core')."""
-        pass
 
     @property
     @abstractmethod
     def file_extension(self) -> str:
         """Return default file extension for this format (e.g., '.json', '.xml')."""
-        pass
 
 
 class VersionedParser(MetadataParser[T, R]):
@@ -148,7 +138,7 @@ class VersionedParser(MetadataParser[T, R]):
     """
 
     @abstractmethod
-    def detect_version(self, data: T) -> Optional[str]:
+    def detect_version(self, data: T) -> str | None:
         """Detect the version of the format from raw data.
 
         Args:
@@ -157,7 +147,6 @@ class VersionedParser(MetadataParser[T, R]):
         Returns:
             Version string (e.g., '2.1', '3.0') or None if cannot be determined
         """
-        pass
 
     @abstractmethod
     def supported_versions(self) -> list[str]:
@@ -166,4 +155,3 @@ class VersionedParser(MetadataParser[T, R]):
         Returns:
             List of version strings (e.g., ['2.1', '3.0'])
         """
-        pass

@@ -8,11 +8,9 @@ This parser supports ALTO versions 1-4 with automatic version detection.
 """
 
 from dataclasses import dataclass, field
-from typing import List, Optional
 from xml.etree import ElementTree as ET
 
 from pybookget.formats.base import VersionedParser
-
 
 # ALTO namespace mapping for different versions
 ALTO_NAMESPACES = {
@@ -27,21 +25,21 @@ ALTO_NAMESPACES = {
 class ALTOString:
     """Represents a word/string in ALTO."""
     content: str
-    confidence: Optional[float] = None
-    x: Optional[int] = None
-    y: Optional[int] = None
-    width: Optional[int] = None
-    height: Optional[int] = None
+    confidence: float | None = None
+    x: int | None = None
+    y: int | None = None
+    width: int | None = None
+    height: int | None = None
 
 
 @dataclass
 class ALTOTextLine:
     """Represents a text line in ALTO."""
-    strings: List[ALTOString] = field(default_factory=list)
-    x: Optional[int] = None
-    y: Optional[int] = None
-    width: Optional[int] = None
-    height: Optional[int] = None
+    strings: list[ALTOString] = field(default_factory=list)
+    x: int | None = None
+    y: int | None = None
+    width: int | None = None
+    height: int | None = None
 
     def get_text(self) -> str:
         """Get concatenated text of all strings in this line.
@@ -55,11 +53,11 @@ class ALTOTextLine:
 @dataclass
 class ALTOTextBlock:
     """Represents a text block in ALTO."""
-    lines: List[ALTOTextLine] = field(default_factory=list)
-    x: Optional[int] = None
-    y: Optional[int] = None
-    width: Optional[int] = None
-    height: Optional[int] = None
+    lines: list[ALTOTextLine] = field(default_factory=list)
+    x: int | None = None
+    y: int | None = None
+    width: int | None = None
+    height: int | None = None
 
     def get_text(self) -> str:
         """Get concatenated text of all lines in this block.
@@ -75,9 +73,9 @@ class ALTOPage:
     """Represents a page in ALTO."""
     width: int
     height: int
-    blocks: List[ALTOTextBlock] = field(default_factory=list)
-    physical_img_nr: Optional[int] = None
-    page_id: Optional[str] = None
+    blocks: list[ALTOTextBlock] = field(default_factory=list)
+    physical_img_nr: int | None = None
+    page_id: str | None = None
 
     def get_text(self) -> str:
         """Get full text content of the page.
@@ -91,8 +89,8 @@ class ALTOPage:
 @dataclass
 class ALTODocument:
     """Represents a parsed ALTO document."""
-    version: Optional[str] = None
-    page: Optional[ALTOPage] = None
+    version: str | None = None
+    page: ALTOPage | None = None
     metadata: dict = field(default_factory=dict)
 
     def get_text(self) -> str:
@@ -181,7 +179,7 @@ class ALTOParser(VersionedParser[str, ALTODocument]):
         except Exception:
             return False
 
-    def detect_version(self, data: str) -> Optional[str]:
+    def detect_version(self, data: str) -> str | None:
         """Detect ALTO version from XML namespace.
 
         Args:
@@ -264,7 +262,7 @@ class ALTOParser(VersionedParser[str, ALTODocument]):
         except ET.ParseError as e:
             raise ValueError(f"Invalid XML: {e}") from e
 
-    def _get_namespace(self, root: ET.Element) -> Optional[str]:
+    def _get_namespace(self, root: ET.Element) -> str | None:
         """Extract namespace from root element.
 
         Args:

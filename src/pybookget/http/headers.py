@@ -4,10 +4,9 @@ Supports simple key-value header file format.
 """
 
 from pathlib import Path
-from typing import Dict
 
 
-def load_headers_from_file(header_file: str) -> Dict[str, str]:
+def load_headers_from_file(header_file: str) -> dict[str, str]:
     """Load HTTP headers from file.
 
     File format is simple key: value pairs, one per line.
@@ -29,7 +28,7 @@ def load_headers_from_file(header_file: str) -> Dict[str, str]:
     if not header_path.exists():
         return headers
 
-    with open(header_path, 'r') as f:
+    with open(header_path) as f:
         for line in f:
             line = line.strip()
 

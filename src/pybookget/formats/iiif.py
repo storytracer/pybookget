@@ -7,7 +7,7 @@ supporting both version 2 and version 3 of the specification.
 The parser auto-detects the version and returns the appropriate data model.
 """
 
-from typing import Any, Dict, Optional, Union
+from typing import Any
 
 from pybookget.formats.base import VersionedParser
 from pybookget.models.iiif import (
@@ -16,7 +16,7 @@ from pybookget.models.iiif import (
 )
 
 
-class IIIFParser(VersionedParser[Dict[str, Any], Union[IIIFManifestV2, IIIFManifestV3]]):
+class IIIFParser(VersionedParser[dict[str, Any], IIIFManifestV2 | IIIFManifestV3]):
     """Parser for IIIF Presentation API manifests (v2 and v3).
 
     This parser automatically detects the IIIF version and returns the
@@ -29,7 +29,7 @@ class IIIFParser(VersionedParser[Dict[str, Any], Union[IIIFManifestV2, IIIFManif
         Version: 3.0
     """
 
-    def parse(self, data: Dict[str, Any]) -> Union[IIIFManifestV2, IIIFManifestV3]:
+    def parse(self, data: dict[str, Any]) -> IIIFManifestV2 | IIIFManifestV3:
         """Parse IIIF manifest JSON into structured data model.
 
         Args:
@@ -50,7 +50,7 @@ class IIIFParser(VersionedParser[Dict[str, Any], Union[IIIFManifestV2, IIIFManif
         else:
             raise ValueError("Unable to determine IIIF manifest version")
 
-    def validate(self, data: Dict[str, Any]) -> bool:
+    def validate(self, data: dict[str, Any]) -> bool:
         """Validate IIIF manifest structure.
 
         Args:
@@ -77,7 +77,7 @@ class IIIFParser(VersionedParser[Dict[str, Any], Union[IIIFManifestV2, IIIFManif
 
         return False
 
-    def detect_version(self, data: Dict[str, Any]) -> Optional[str]:
+    def detect_version(self, data: dict[str, Any]) -> str | None:
         """Detect IIIF Presentation API version from manifest.
 
         Args:
@@ -129,14 +129,14 @@ class IIIFParser(VersionedParser[Dict[str, Any], Union[IIIFManifestV2, IIIFManif
         ]
 
 
-class IIIFParserV2(VersionedParser[Dict[str, Any], IIIFManifestV2]):
+class IIIFParserV2(VersionedParser[dict[str, Any], IIIFManifestV2]):
     """Parser specifically for IIIF Presentation API v2 manifests.
 
     Use this when you know you're working with v2 manifests and want
     type safety guarantees.
     """
 
-    def parse(self, data: Dict[str, Any]) -> IIIFManifestV2:
+    def parse(self, data: dict[str, Any]) -> IIIFManifestV2:
         """Parse IIIF v2 manifest.
 
         Args:
@@ -152,13 +152,13 @@ class IIIFParserV2(VersionedParser[Dict[str, Any], IIIFManifestV2]):
             raise ValueError("Invalid IIIF v2 manifest")
         return IIIFManifestV2.from_dict(data)
 
-    def validate(self, data: Dict[str, Any]) -> bool:
+    def validate(self, data: dict[str, Any]) -> bool:
         """Validate IIIF v2 manifest."""
         return isinstance(data, dict) and (
             '@context' in data or 'context' in data
         ) and 'sequences' in data
 
-    def detect_version(self, data: Dict[str, Any]) -> Optional[str]:
+    def detect_version(self, data: dict[str, Any]) -> str | None:
         """Always returns '2.1' for this parser."""
         return "2.1" if self.validate(data) else None
 
@@ -177,14 +177,14 @@ class IIIFParserV2(VersionedParser[Dict[str, Any], IIIFManifestV2]):
         return ["application/json", "application/ld+json"]
 
 
-class IIIFParserV3(VersionedParser[Dict[str, Any], IIIFManifestV3]):
+class IIIFParserV3(VersionedParser[dict[str, Any], IIIFManifestV3]):
     """Parser specifically for IIIF Presentation API v3 manifests.
 
     Use this when you know you're working with v3 manifests and want
     type safety guarantees.
     """
 
-    def parse(self, data: Dict[str, Any]) -> IIIFManifestV3:
+    def parse(self, data: dict[str, Any]) -> IIIFManifestV3:
         """Parse IIIF v3 manifest.
 
         Args:
@@ -200,7 +200,7 @@ class IIIFParserV3(VersionedParser[Dict[str, Any], IIIFManifestV3]):
             raise ValueError("Invalid IIIF v3 manifest")
         return IIIFManifestV3.from_dict(data)
 
-    def validate(self, data: Dict[str, Any]) -> bool:
+    def validate(self, data: dict[str, Any]) -> bool:
         """Validate IIIF v3 manifest."""
         return (
             isinstance(data, dict)
@@ -208,7 +208,7 @@ class IIIFParserV3(VersionedParser[Dict[str, Any], IIIFManifestV3]):
             and 'id' in data
         )
 
-    def detect_version(self, data: Dict[str, Any]) -> Optional[str]:
+    def detect_version(self, data: dict[str, Any]) -> str | None:
         """Always returns '3.0' for this parser."""
         return "3.0" if self.validate(data) else None
 
@@ -228,7 +228,7 @@ class IIIFParserV3(VersionedParser[Dict[str, Any], IIIFManifestV3]):
 
 
 # Convenience function for backward compatibility
-def parse_iiif_manifest(data: Dict[str, Any]) -> Union[IIIFManifestV2, IIIFManifestV3]:
+def parse_iiif_manifest(data: dict[str, Any]) -> IIIFManifestV2 | IIIFManifestV3:
     """Parse IIIF manifest with automatic version detection.
 
     This is a convenience function that wraps IIIFParser for easy use.

@@ -2,13 +2,18 @@
 
 File-level resumability: Files are skipped if they already exist.
 No below-file-level parallelization or chunking.
+
+Tasks are streamed: ``run()`` takes any iterable or async iterable of
+DownloadTasks and keeps only a small bounded queue of them in memory, so it
+handles millions of files at constant memory. ``execute()`` runs the tasks
+queued with ``add_task()``/``add_tasks()`` the same way.
 """
 
 import asyncio
 import logging
+from collections.abc import AsyncIterable, Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, List, Optional
 
 import httpx
 from tqdm import tqdm
@@ -28,8 +33,9 @@ class DownloadTask:
     book_id: str = ""
     title: str = ""
     volume_id: str = ""
-    headers: Optional[dict] = None
-    fallback_url: Optional[str] = None  # Try this URL if primary fails with 404
+    headers: dict | None = None
+    fallback_url: str | None = None  # Try this URL if primary fails with 404
+    error: str | None = None  # Set by the manager when the download failed
 
     def __post_init__(self):
         """Ensure save_path is a Path object."""
@@ -37,21 +43,33 @@ class DownloadTask:
             self.save_path = Path(self.save_path)
 
 
+@dataclass
+class DownloadStats:
+    """Outcome counts of a download run."""
+
+    successful: int = 0  # downloaded now, plus skipped
+    failed: int = 0
+    skipped: int = 0  # already existed (counted in successful too)
+
+
+Callback = Callable[[DownloadTask, bool], None]
+
+
 class DownloadManager:
     """Manages concurrent file downloads with progress tracking (async-only).
 
     Features:
     - File-level resumability (skip existing files)
-    - Concurrent downloads (multiple files in parallel)
-    - No below-file-level parallelization
+    - Concurrent downloads (``max_workers`` files in parallel)
+    - Streaming: bounded memory for any number of tasks
+    - Results reported per task (callback and ``task.error``)
     - Progress tracking with tqdm
-    - Async with asyncio.Semaphore for concurrency control
     """
 
     def __init__(
         self,
         config: Config,
-        max_workers: Optional[int] = None,
+        max_workers: int | None = None,
         show_progress: bool = True,
     ):
         """Initialize download manager.
@@ -64,7 +82,7 @@ class DownloadManager:
         self.config = config
         self.max_workers = max_workers or config.threads_per_task
         self.show_progress = show_progress and config.show_progress
-        self.tasks: List[DownloadTask] = []
+        self.tasks: list[DownloadTask] = []
 
     def add_task(self, task: DownloadTask):
         """Add a download task to the queue.
@@ -74,7 +92,7 @@ class DownloadManager:
         """
         self.tasks.append(task)
 
-    def add_tasks(self, tasks: List[DownloadTask]):
+    def add_tasks(self, tasks: list[DownloadTask]):
         """Add multiple download tasks to the queue.
 
         Args:
@@ -82,79 +100,127 @@ class DownloadManager:
         """
         self.tasks.extend(tasks)
 
-    async def execute(
-        self,
-        callback: Optional[Callable[[DownloadTask, bool], None]] = None
-    ) -> int:
+    async def execute(self, callback: Callback | None = None) -> int:
         """Execute all queued download tasks concurrently.
-
-        Uses asyncio for concurrent downloads with Semaphore for concurrency control.
 
         Args:
             callback: Optional callback function called after each task completes
                      with signature: callback(task, success)
 
         Returns:
-            Number of successfully downloaded files
+            Number of successfully downloaded files (including skipped existing files)
         """
         if not self.tasks:
             logger.warning("No tasks to execute")
             return 0
 
-        successful = 0
-        failed = 0
+        tasks, self.tasks = self.tasks, []
+        stats = await self.run(tasks, callback=callback)
+        return stats.successful
 
-        # Create async httpx client
+    async def run(
+        self,
+        tasks: Iterable[DownloadTask] | AsyncIterable[DownloadTask],
+        callback: Callback | None = None,
+        total: int | None = None,
+    ) -> DownloadStats:
+        """Download a stream of tasks with ``max_workers`` concurrent downloads.
+
+        Tasks are pulled from ``tasks`` only as workers become free (at most
+        ``2 * max_workers`` are waiting at any time), so ``tasks`` can be a
+        generator over millions of files.
+
+        Args:
+            tasks: Iterable or async iterable of DownloadTasks
+            callback: Optional ``callback(task, success)`` called once per task,
+                with the task the result belongs to. A failing callback is
+                logged and does not stop the run.
+            total: Number of tasks for the progress bar (defaults to len(tasks)
+                when available)
+
+        Returns:
+            DownloadStats with successful, failed and skipped counts
+        """
+        stats = DownloadStats()
+        workers = max(1, self.max_workers)
+        queue: asyncio.Queue = asyncio.Queue(maxsize=2 * workers)
+        done = object()  # sentinel telling a worker to stop
+
+        if total is None and hasattr(tasks, "__len__"):
+            total = len(tasks)  # type: ignore[arg-type]
+        pbar = tqdm(total=total, desc="Downloading", unit="file") if self.show_progress else None
+
         client = create_client(self.config)
 
-        # Create progress bar if enabled
-        pbar = None
-        if self.show_progress:
-            pbar = tqdm(total=len(self.tasks), desc="Downloading", unit="file")
+        async def produce():
+            if isinstance(tasks, AsyncIterable):
+                async for task in tasks:
+                    await queue.put(task)
+            else:
+                for task in tasks:
+                    await queue.put(task)
 
-        try:
-            # Use asyncio.Semaphore to limit concurrent downloads
-            semaphore = asyncio.Semaphore(self.max_workers)
-
-            async def download_with_semaphore(task: DownloadTask):
-                async with semaphore:
-                    return await self._download_single(client, task)
-
-            # Create all tasks
-            download_tasks = [download_with_semaphore(task) for task in self.tasks]
-
-            # Execute concurrently and process results
-            for task, coro in zip(self.tasks, asyncio.as_completed(download_tasks)):
+        async def work():
+            while True:
+                task = await queue.get()
                 try:
-                    success = await coro
-                    if success:
-                        successful += 1
-                    else:
-                        failed += 1
+                    if task is done:
+                        return
+                    try:
+                        await self._process(client, task, stats, callback)
+                    except Exception as e:  # never let one task stop a worker
+                        task.error = f"{type(e).__name__}: {e}"
+                        stats.failed += 1
+                        logger.error(f"Unexpected error for {task.url}: {e}")
+                    if pbar:
+                        pbar.update(1)
+                        pbar.set_postfix({"success": stats.successful, "failed": stats.failed})
+                finally:
+                    queue.task_done()
 
-                    # Call callback if provided
-                    if callback:
-                        callback(task, success)
-
-                except Exception as e:
-                    logger.error(f"Task failed with exception: {e}")
-                    failed += 1
-
-                # Update progress bar
-                if pbar:
-                    pbar.update(1)
-                    pbar.set_postfix({"success": successful, "failed": failed})
-
+        worker_tasks = [asyncio.create_task(work()) for _ in range(workers)]
+        try:
+            await produce()
+            for _ in worker_tasks:
+                await queue.put(done)
+            await asyncio.gather(*worker_tasks)
         finally:
+            for worker in worker_tasks:
+                worker.cancel()
+            await asyncio.gather(*worker_tasks, return_exceptions=True)
             await client.aclose()
             if pbar:
                 pbar.close()
 
-        # Clear tasks after execution
-        self.tasks = []
+        logger.info(
+            f"Download complete: {stats.successful} successful "
+            f"({stats.skipped} already present), {stats.failed} failed"
+        )
+        return stats
 
-        logger.info(f"Download complete: {successful} successful, {failed} failed")
-        return successful
+    async def _process(
+        self,
+        client: httpx.AsyncClient,
+        task: DownloadTask,
+        stats: DownloadStats,
+        callback: Callback | None,
+    ) -> None:
+        """Download one task, update stats and report it to the callback."""
+        if task.save_path.exists():
+            stats.skipped += 1
+            success = True
+        else:
+            success = await self._download_single(client, task)
+        if success:
+            stats.successful += 1
+        else:
+            stats.failed += 1
+
+        if callback:
+            try:
+                callback(task, success)
+            except Exception as e:
+                logger.error(f"Callback failed for {task.url}: {e}")
 
     async def _download_single(self, client: httpx.AsyncClient, task: DownloadTask) -> bool:
         """Download a single file with tenacity retry logic and fallback support.
@@ -164,7 +230,7 @@ class DownloadManager:
             task: DownloadTask to execute
 
         Returns:
-            True if successful, False otherwise
+            True if successful, False otherwise (``task.error`` says why)
         """
         # Try primary URL first
         try:
@@ -203,13 +269,16 @@ class DownloadManager:
                     return True
 
                 except Exception as fallback_error:
+                    task.error = f"{type(fallback_error).__name__}: {fallback_error}"
                     logger.error(f"Fallback also failed for {task.fallback_url}: {fallback_error}")
                     return False
             else:
+                task.error = f"HTTP {e.response.status_code}"
                 logger.error(f"Failed to download {task.url}: {e}")
                 return False
 
         except Exception as e:
+            task.error = f"{type(e).__name__}: {e}"
             logger.error(f"Failed to download {task.url} after retries: {e}")
             return False
 

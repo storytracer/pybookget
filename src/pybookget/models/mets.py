@@ -8,8 +8,6 @@ For parsing METS XML, use pybookget.formats.mets.METSParser.
 """
 
 from dataclasses import dataclass, field
-from typing import Optional
-
 
 # METS namespace mapping
 METS_NAMESPACES = {
@@ -26,7 +24,7 @@ class METSFile:
     id: str
     mimetype: str
     href: str
-    use: Optional[str] = None  # e.g., "FULLTEXT", "DEFAULT", "THUMBS"
+    use: str | None = None  # e.g., "FULLTEXT", "DEFAULT", "THUMBS"
 
 
 @dataclass
@@ -41,15 +39,15 @@ class METSPage:
 @dataclass
 class METSMetadata:
     """MODS metadata extracted from METS."""
-    title: Optional[str] = None
-    subtitle: Optional[str] = None
-    author: Optional[str] = None
-    publisher: Optional[str] = None
-    date: Optional[str] = None
-    language: Optional[str] = None
-    extent: Optional[str] = None
-    doi: Optional[str] = None
-    license: Optional[str] = None
+    title: str | None = None
+    subtitle: str | None = None
+    author: str | None = None
+    publisher: str | None = None
+    date: str | None = None
+    language: str | None = None
+    extent: str | None = None
+    doi: str | None = None
+    license: str | None = None
 
 
 @dataclass

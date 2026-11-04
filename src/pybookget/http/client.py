@@ -8,28 +8,41 @@ Retry logic is handled by tenacity decorators for explicit and configurable
 retry behavior.
 """
 
+import asyncio
+import os
+import tempfile
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
 from pathlib import Path
-from typing import Dict, Optional
 
 import httpx
 from fake_useragent import UserAgent
 from tenacity import (
+    RetryCallState,
     retry,
+    retry_if_exception,
     stop_after_attempt,
     wait_exponential,
-    retry_if_exception_type,
 )
+from tenacity.wait import wait_base
 
 from pybookget.config import Config
 from pybookget.http.cookies import load_cookies_from_file
 from pybookget.http.headers import load_headers_from_file
+from pybookget.http.ratelimit import wait_for_rate_limit
 
 
-def create_client(config: Config) -> httpx.AsyncClient:
+def create_client(
+    config: Config, transport: httpx.AsyncBaseTransport | None = None
+) -> httpx.AsyncClient:
     """Create an async httpx client from configuration.
+
+    If ``config.rate_limits`` is set, every request (including retries) first
+    waits on the limiter shared by all clients of this config.
 
     Args:
         config: Configuration object
+        transport: Optional httpx transport (e.g. httpx.MockTransport in tests)
 
     Returns:
         Configured httpx.AsyncClient instance
@@ -62,6 +75,14 @@ def create_client(config: Config) -> httpx.AsyncClient:
         for cookie in cookie_list:
             cookies[cookie.name] = cookie.value
 
+    # Rate limiting: wait on the shared limiter before every request
+    event_hooks = {}
+    if config.rate_limits:
+        async def _wait_for_rate_limit(request: httpx.Request) -> None:
+            await wait_for_rate_limit(config)
+
+        event_hooks["request"] = [_wait_for_rate_limit]
+
     # Create async client with configuration
     # Disable connection pooling to ensure new connections for each request
     return httpx.AsyncClient(
@@ -73,11 +94,75 @@ def create_client(config: Config) -> httpx.AsyncClient:
         http2=True,
         proxy=config.proxy,
         limits=httpx.Limits(max_keepalive_connections=0),
+        event_hooks=event_hooks,
+        transport=transport,
     )
+
+
+# HTTP statuses worth retrying: the server is busy, overloaded or briefly failing.
+# Every other 4xx (404, 403, ...) is final and fails immediately.
+RETRYABLE_STATUS_CODES = frozenset({408, 425, 429, 500, 502, 503, 504})
+
+
+def is_retryable(exc: BaseException) -> bool:
+    """Whether a failed request should be retried.
+
+    Retries transport failures (timeouts, connection and proxy errors, broken
+    connections) and the statuses in ``RETRYABLE_STATUS_CODES``.
+    """
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code in RETRYABLE_STATUS_CODES
+    return isinstance(exc, httpx.TransportError)
+
+
+def parse_retry_after(value: str | None) -> float | None:
+    """Seconds to wait from a Retry-After header (delta-seconds or HTTP-date), or None."""
+    if not value:
+        return None
+    value = value.strip()
+    try:
+        return max(0.0, float(value))
+    except ValueError:
+        pass
+    try:
+        when = parsedate_to_datetime(value)
+    except (TypeError, ValueError):
+        return None
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=UTC)
+    return max(0.0, (when - datetime.now(UTC)).total_seconds())
+
+
+class wait_retry_after_or_exponential(wait_base):
+    """Exponential backoff, or the server's Retry-After if that is longer.
+
+    Retry-After (sent with 429 and 503) is honoured up to ``retry_after_max``
+    seconds, so a server asking us to slow down gets at least that pause.
+    """
+
+    def __init__(self, config: Config):
+        self.exponential = wait_exponential(
+            multiplier=config.retry_multiplier,
+            min=config.retry_wait_min,
+            max=config.retry_wait_max,
+        )
+        self.retry_after_max = config.retry_after_max
+
+    def __call__(self, retry_state: RetryCallState) -> float:
+        wait = self.exponential(retry_state)
+        exc = retry_state.outcome.exception() if retry_state.outcome else None
+        if isinstance(exc, httpx.HTTPStatusError):
+            retry_after = parse_retry_after(exc.response.headers.get("Retry-After"))
+            if retry_after is not None:
+                wait = max(wait, min(retry_after, self.retry_after_max))
+        return wait
 
 
 def create_retry_decorator(config: Config):
     """Create a tenacity retry decorator from config.
+
+    Retries only what ``is_retryable`` accepts, up to ``config.max_retries``
+    attempts, waiting with exponential backoff or the server's Retry-After.
 
     Args:
         config: Configuration object
@@ -87,16 +172,8 @@ def create_retry_decorator(config: Config):
     """
     return retry(
         stop=stop_after_attempt(config.max_retries),
-        wait=wait_exponential(
-            multiplier=config.retry_multiplier,
-            min=config.retry_wait_min,
-            max=config.retry_wait_max,
-        ),
-        retry=retry_if_exception_type((
-            httpx.HTTPError,
-            httpx.TimeoutException,
-            httpx.NetworkError,
-        )),
+        wait=wait_retry_after_or_exponential(config),
+        retry=retry_if_exception(is_retryable),
         reraise=True,
     )
 
@@ -106,12 +183,14 @@ async def download_file(
     url: str,
     dest_path: Path,
     config: Config,
-    headers: Optional[Dict[str, str]] = None,
+    headers: dict[str, str] | None = None,
 ) -> Path:
     """Download a file using httpx client with tenacity retry logic.
 
-    File is only written to disk after complete download.
-    If file exists, it is skipped (file-level resumability).
+    The file appears at ``dest_path`` only once it is complete: the content is
+    written to a hidden temporary file in the same directory and renamed into
+    place, so an interrupted run never leaves a truncated file that a later run
+    would skip as done. If the file exists, it is skipped (file-level resumability).
 
     Retries are handled by tenacity with exponential backoff.
 
@@ -150,7 +229,31 @@ async def download_file(
     # Execute download with retries
     content = await _download_with_retry()
 
-    # Write complete file to disk atomically
-    dest_path.write_bytes(content)
+    # Write complete file to disk atomically (temporary file, then rename), in a
+    # thread so disk I/O never stalls the other downloads on the event loop
+    await asyncio.to_thread(write_atomically, dest_path, content)
 
     return dest_path
+
+
+def write_atomically(dest_path: Path, content: bytes) -> None:
+    """Write ``content`` to ``dest_path`` so the file only ever exists complete.
+
+    Writes to a hidden ``.<name>.<random>.part`` file in the same directory,
+    then renames it over ``dest_path`` (atomic on POSIX and Windows), so a
+    killed or crashed process never leaves a truncated file behind. There is
+    no fsync: a power loss or OS crash right after the rename could still lose
+    the data, which costs too much to rule out for millions of files. The
+    temporary file is removed if anything fails.
+    """
+    fd, tmp_name = tempfile.mkstemp(dir=dest_path.parent, prefix=f".{dest_path.name}.", suffix=".part")
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(content)
+        os.replace(tmp_name, dest_path)
+    except BaseException:
+        try:
+            os.unlink(tmp_name)
+        except FileNotFoundError:
+            pass
+        raise

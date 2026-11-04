@@ -10,16 +10,13 @@ Subclasses should implement the abstract methods to provide library-specific log
 Metadata follows Dublin Core standard and is serialized using RO-Crate v1.2.
 """
 
-import json
 import logging
 from abc import abstractmethod
-from pathlib import Path
-from typing import Dict, Optional
 
 from pybookget.config import Config
 from pybookget.formats.rocrate import ROCrateWriter
 from pybookget.http.download import DownloadManager, DownloadTask
-from pybookget.models.library import LibraryBook, LibraryPage
+from pybookget.models.library import LibraryBook
 from pybookget.router.base import BaseHandler
 
 logger = logging.getLogger(__name__)
@@ -56,9 +53,9 @@ class LibraryHandler(BaseHandler):
             config: Configuration object
         """
         super().__init__(url, config)
-        self.library_book: Optional[LibraryBook] = None
+        self.library_book: LibraryBook | None = None
 
-    async def run(self) -> Dict[str, any]:
+    async def run(self) -> dict[str, any]:
         """Execute library book download with standard workflow.
 
         Workflow:
@@ -150,7 +147,6 @@ class LibraryHandler(BaseHandler):
         Raises:
             Exception if metadata cannot be fetched or parsed
         """
-        pass
 
     async def save_rocrate_metadata(self, **kwargs) -> None:
         """Write RO-Crate metadata to the root directory.
@@ -347,8 +343,8 @@ class LibraryHandler(BaseHandler):
         total_pages: int,
         images_downloaded: int,
         ocr_files_downloaded: int,
-        error: Optional[str] = None,
-    ) -> Dict[str, any]:
+        error: str | None = None,
+    ) -> dict[str, any]:
         """Create standardized result dictionary for library handlers.
 
         Args:

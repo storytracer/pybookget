@@ -10,7 +10,6 @@ packaging research data with their metadata.
 
 import json
 from pathlib import Path
-from typing import List, Optional
 
 from rocrate.model.contextentity import ContextEntity
 from rocrate.model.person import Person
@@ -51,8 +50,8 @@ class ROCrateWriter(MetadataWriter[LibraryBook]):
         self,
         data: LibraryBook,
         output_path: Path,
-        images_dir: Optional[Path] = None,
-        ocr_dir: Optional[Path] = None,
+        images_dir: Path | None = None,
+        ocr_dir: Path | None = None,
         **options
     ) -> None:
         """Write LibraryBook as RO-Crate metadata to file.
@@ -134,9 +133,9 @@ class ROCrateWriter(MetadataWriter[LibraryBook]):
     def _create_crate(
         self,
         data: LibraryBook,
-        base_path: Optional[Path],
-        images_dir: Optional[Path],
-        ocr_dir: Optional[Path]
+        base_path: Path | None,
+        images_dir: Path | None,
+        ocr_dir: Path | None
     ) -> ROCrate:
         """Create ROCrate object from LibraryBook.
 
@@ -230,9 +229,9 @@ class ROCrateWriter(MetadataWriter[LibraryBook]):
     def _collect_file_parts(
         self,
         base_path: Path,
-        images_dir: Optional[Path],
-        ocr_dir: Optional[Path]
-    ) -> List[str]:
+        images_dir: Path | None,
+        ocr_dir: Path | None
+    ) -> list[str]:
         """Collect file paths for hasPart relationships.
 
         Args:
@@ -317,8 +316,8 @@ class DublinCoreMapper:
 def write_rocrate_metadata(
     book: LibraryBook,
     output_dir: Path,
-    images_dir: Optional[Path] = None,
-    ocr_dir: Optional[Path] = None
+    images_dir: Path | None = None,
+    ocr_dir: Path | None = None
 ) -> None:
     """Write RO-Crate metadata for a LibraryBook.
 

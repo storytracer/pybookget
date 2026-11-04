@@ -17,13 +17,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Installation
 
-```bash
-# Install in development mode
-cd pybookget
-pip install -e .
+Python 3.12+ (`requires-python = ">=3.12"`, pinned in `.python-version`), managed with uv
+(`[tool.uv] required-version = ">=0.13.6"`, build backend `uv_build`). Dependencies are locked in
+`uv.lock`; there is no requirements.txt.
 
-# Install with development dependencies
-pip install -e ".[dev]"
+```bash
+# Create .venv with the project and the dev dependency group
+cd pybookget
+uv sync
+
+# Add a dependency (updates pyproject.toml and uv.lock)
+uv add <package>
 ```
 
 ## Development Commands
@@ -57,20 +61,20 @@ pybookget download "URL" --verbose
 ## Testing
 
 ```bash
-# Run tests (when tests are added)
-pytest
+# Run tests (tests/, no network: httpx.MockTransport fakes the servers)
+uv run pytest
 
 # With coverage
-pytest --cov=pybookget
+uv run pytest --cov=pybookget
 
 # Type checking
-mypy src/pybookget/
+uv run mypy src/pybookget/
 
 # Linting
-ruff check src/pybookget/
+uv run ruff check src/pybookget/
 
 # Code formatting
-black src/pybookget/
+uv run black src/pybookget/
 ```
 
 ## Architecture
@@ -81,9 +85,11 @@ black src/pybookget/
 pybookget/                 # Git repository root
 ├── README.md              # Comprehensive documentation
 ├── CLAUDE.md              # This file
-├── LICENSE                # GPL-3.0
-├── pyproject.toml         # Package configuration
-├── requirements.txt       # Direct dependencies list
+├── LICENSE                # MIT
+├── pyproject.toml         # Package configuration (uv_build, dependency groups)
+├── uv.lock                # Locked dependencies (uv)
+├── .python-version        # 3.12
+├── tests/                 # pytest suite (test_ratelimit.py, test_download.py)
 └── src/                   # Source code (src layout)
     └── pybookget/         # Python package
         ├── __init__.py        # Package exports
@@ -95,6 +101,7 @@ pybookget/                 # Git repository root
         ├── http/              # HTTP utilities (async-only)
         │   ├── client.py      # httpx AsyncClient factory
         │   ├── download.py    # Async download manager with fallback support
+        │   ├── ratelimit.py   # pyrate-limiter limits shared per Config and event loop
         │   ├── cookies.py     # Cookie file parsing (Netscape format)
         │   └── headers.py     # Header file parsing
         ├── utils/             # Utility functions
@@ -167,7 +174,13 @@ Universal IIIF Presentation API v2/v3 handler with advanced features:
 - `DownloadTask`: Task definition with primary + fallback URLs
 - `DownloadManager`: Async concurrent download manager
   - File-level resumability (skip existing files)
-  - Semaphore-based concurrency control
+  - Streaming `run(tasks)`: any iterable/async iterable, `max_workers` workers on a bounded
+    queue (2 × workers), constant memory for millions of files; `execute()` runs the
+    `add_tasks()` queue through it. Returns `DownloadStats` (successful, failed, skipped)
+  - Callback `(task, success)` always gets the task the result belongs to; failures set
+    `task.error`; a failing callback or task never stops a worker
+  - Atomic writes (`client.write_atomically`): hidden `.<name>.<random>.part` file, then
+    `os.replace`, in a thread (`asyncio.to_thread`) so disk I/O doesn't stall the loop; no fsync
   - Progress tracking with tqdm
   - **Fallback retry on 404**: Tries fallback_url if primary fails with 404
   - Tenacity retry logic for network errors
@@ -175,7 +188,10 @@ Universal IIIF Presentation API v2/v3 handler with advanced features:
 **Retry Logic:**
 - Uses tenacity library for exponential backoff
 - Configurable max retries, wait times, multiplier
-- Only retries on httpx errors (HTTPError, TimeoutException, NetworkError)
+- `client.is_retryable`: retries `httpx.TransportError` and statuses 408/425/429/500/502/503/504
+  only; other 4xx (404, 403, ...) fail at once
+- `client.wait_retry_after_or_exponential`: waits the backoff or the server's `Retry-After`
+  (seconds or HTTP-date), whichever is longer, capped at `Config.retry_after_max` (300 s)
 
 #### 6. **Models** (`src/pybookget/models/iiif.py`)
 Data models for IIIF manifests:
@@ -258,7 +274,7 @@ config = Config(
     timeout=300,                  # Request timeout (seconds)
     user_agent="...",             # Custom user agent
     proxy="http://...",           # HTTP/HTTPS proxy
-    verify_ssl=False,             # SSL verification
+    verify_ssl=True,              # TLS verification (default True)
 
     # Retry configuration (tenacity)
     max_retries=3,                # Max retry attempts
@@ -277,10 +293,24 @@ config = Config(
     header_file="headers.txt",    # Custom headers
 
     # Other
-    sleep_interval=0,             # Rate limiting (seconds)
+    sleep_interval=0,             # Pause after each download (seconds, per worker)
+    rate_limits=[(10, 1), (400, 60)],  # (requests, seconds) windows, all at once; None = no limit
     show_progress=True,           # Progress bars
 )
 ```
+
+### Rate limiting
+
+`Config.rate_limits` is enforced by pyrate-limiter (`http/ratelimit.py`). `create_client()`
+registers an httpx **request event hook** that awaits the limiter before every request, so
+retries, redirects, fallback URLs and manifest fetches all count, and every client created from
+the same Config shares one limit. A hook rather than a custom transport on purpose: when a
+client has `proxy=`, httpx routes requests through its own proxy transport and bypasses a custom
+transport (tested in `tests/test_ratelimit.py`). The limiter is cached per Config **and event
+loop** (`Config._limiters`), because asyncio locks bind to a loop and the interactive CLI calls
+`asyncio.run()` repeatedly with one Config. Windows are validated with pyrate's
+`validate_rate_list` when the Config is created. CLI: `--rate-limit REQUESTS/SECONDS`
+(repeatable) on `download` and `batch`.
 
 ## Adding Custom Handlers
 
@@ -411,13 +441,17 @@ await client.aclose()
 Key dependencies (see `pyproject.toml`):
 - **httpx**: Async HTTP client with HTTP/2 support
 - **tenacity**: Retry logic with exponential backoff
+- **pyrate-limiter** (4.x): Async request rate limiting (`Config.rate_limits`)
 - **click**: CLI framework
 - **tqdm**: Progress bars
 - **pydantic** (optional): May be used for validation in future
 
 ## Testing Strategy
 
-(Tests to be added)
+`tests/test_ratelimit.py` covers rate limiting (parsing, validation, shared limits, retries,
+proxies, repeated event loops, DownloadManager). `tests/test_download.py` covers the download
+manager and `download_file` (streaming, per-task results, retry policy, Retry-After, atomic
+writes, defaults). Still to be added:
 - Unit tests for parsers (IIIF manifest parsing)
 - Unit tests for URL builders (IIIF Image API URLs)
 - Integration tests for download manager

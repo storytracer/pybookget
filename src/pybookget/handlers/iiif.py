@@ -6,9 +6,7 @@ This handler supports any IIIF-compliant manifest (v2 or v3).
 import json
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional
 
-from pybookget.config import Config
 from pybookget.formats.iiif import IIIFParser
 from pybookget.models.iiif import IIIFCanvas
 from pybookget.router.base import BaseHandler
@@ -27,7 +25,7 @@ class IIIFHandler(BaseHandler):
     This is the default handler for pybookget.
     """
 
-    async def run(self) -> Dict[str, any]:
+    async def run(self) -> dict[str, any]:
         """Execute IIIF manifest download.
 
         Returns:
@@ -119,7 +117,7 @@ class IIIFHandler(BaseHandler):
         except Exception as e:
             logger.error(f"Failed to save manifest: {e}")
 
-    def _extract_image_urls(self, canvases: List[IIIFCanvas]) -> List[tuple]:
+    def _extract_image_urls(self, canvases: list[IIIFCanvas]) -> list[tuple]:
         """Extract image URLs from IIIF canvases with fallback URLs.
 
         Args:
@@ -263,9 +261,9 @@ class IIIFHandler(BaseHandler):
 
     async def _download_images_with_fallback(
         self,
-        image_url_pairs: List[tuple],
+        image_url_pairs: list[tuple],
         save_dir: Path,
-        extension: Optional[str] = None,
+        extension: str | None = None,
         start_index: int = 1,
     ) -> int:
         """Download images with fallback URL support.

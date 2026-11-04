@@ -8,7 +8,6 @@ These models extend the base library models with e-rara-specific fields.
 """
 
 from dataclasses import dataclass, field
-from typing import Optional
 
 from pybookget.models.library import LibraryBook, LibraryMetadata, LibraryPage
 from pybookget.models.mets import METSDocument
@@ -26,7 +25,7 @@ class ERaraMetadata(LibraryMetadata):
 
     Note: DOI is stored in the identifier field (Dublin Core dc:identifier)
     """
-    extent: Optional[str] = None  # Physical description
+    extent: str | None = None  # Physical description
 
 
 @dataclass
@@ -36,7 +35,7 @@ class ERaraPage(LibraryPage):
     Inherits all fields from LibraryPage. The page_id in e-rara
     is a numeric string (e.g., "24224396").
     """
-    pass  # All functionality inherited from LibraryPage
+    # All functionality inherited from LibraryPage
 
 
 @dataclass
@@ -53,16 +52,16 @@ class ERaraBook(LibraryBook):
     pages: list[ERaraPage] = field(default_factory=list)
 
     # e-rara specific: store original METS document
-    mets_document: Optional[METSDocument] = None
+    mets_document: METSDocument | None = None
 
     # Backwards compatibility properties
     @property
-    def doi(self) -> Optional[str]:
+    def doi(self) -> str | None:
         """Convenience property for DOI (stored in identifier field)."""
         return self.metadata.identifier
 
     @property
-    def author(self) -> Optional[str]:
+    def author(self) -> str | None:
         """Convenience property for author (Dublin Core creator)."""
         return self.metadata.creator
 
@@ -72,22 +71,22 @@ class ERaraBook(LibraryBook):
         return self.metadata.date
 
     @property
-    def publisher(self) -> Optional[str]:
+    def publisher(self) -> str | None:
         """Convenience property for publisher."""
         return self.metadata.publisher
 
     @property
-    def language(self) -> Optional[str]:
+    def language(self) -> str | None:
         """Convenience property for language."""
         return self.metadata.language
 
     @property
-    def license(self) -> Optional[str]:
+    def license(self) -> str | None:
         """Convenience property for license (Dublin Core rights)."""
         return self.metadata.rights
 
     @property
-    def subtitle(self) -> Optional[str]:
+    def subtitle(self) -> str | None:
         """Convenience property for subtitle (stored in description)."""
         return self.metadata.description
 
@@ -161,7 +160,7 @@ def create_erara_book_from_mets(book_id: str, mets_doc: METSDocument) -> ERaraBo
     return book
 
 
-def _extract_page_id_from_mets_page(mets_page, files: dict) -> Optional[str]:
+def _extract_page_id_from_mets_page(mets_page, files: dict) -> str | None:
     """
     Extract numeric page ID from METS page file references.
 
@@ -187,7 +186,7 @@ def _extract_page_id_from_mets_page(mets_page, files: dict) -> Optional[str]:
     return None
 
 
-def _get_alto_url_for_page(mets_page, files: dict) -> Optional[str]:
+def _get_alto_url_for_page(mets_page, files: dict) -> str | None:
     """
     Get ALTO URL for a METS page.
 
@@ -207,7 +206,7 @@ def _get_alto_url_for_page(mets_page, files: dict) -> Optional[str]:
     return None
 
 
-def add_iiif_urls_to_book(book: ERaraBook, iiif_image_urls: list[tuple[str, Optional[str]]]) -> None:
+def add_iiif_urls_to_book(book: ERaraBook, iiif_image_urls: list[tuple[str, str | None]]) -> None:
     """
     Add IIIF image URLs to book pages.
 

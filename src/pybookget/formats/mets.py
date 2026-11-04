@@ -7,7 +7,6 @@ used by digital libraries and archives for structural metadata.
 Supports MODS metadata extraction and physical structure parsing.
 """
 
-from typing import Optional
 from xml.etree import ElementTree as ET
 
 from pybookget.formats.base import MetadataParser
@@ -15,8 +14,8 @@ from pybookget.models.mets import (
     METS_NAMESPACES,
     METSDocument,
     METSFile,
-    METSPage,
     METSMetadata,
+    METSPage,
 )
 
 
@@ -276,7 +275,7 @@ class MODSExtractor:
     """
 
     @staticmethod
-    def extract_title(mets_xml: str) -> Optional[str]:
+    def extract_title(mets_xml: str) -> str | None:
         """Extract title from METS/MODS.
 
         Args:
@@ -297,7 +296,7 @@ class MODSExtractor:
         return None
 
     @staticmethod
-    def extract_author(mets_xml: str) -> Optional[str]:
+    def extract_author(mets_xml: str) -> str | None:
         """Extract author from METS/MODS.
 
         Args:
@@ -321,7 +320,7 @@ class MODSExtractor:
         return None
 
     @staticmethod
-    def extract_date(mets_xml: str) -> Optional[str]:
+    def extract_date(mets_xml: str) -> str | None:
         """Extract publication date from METS/MODS.
 
         Args:

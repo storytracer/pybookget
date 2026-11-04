@@ -1,7 +1,6 @@
 """Handler registry for manual handler selection."""
 
 import logging
-from typing import Dict, Optional, Type
 
 from pybookget.config import Config
 from pybookget.router.base import BaseHandler
@@ -15,11 +14,11 @@ class HandlerRegistry:
     Handlers must be explicitly selected by name - no automatic URL matching.
     """
 
-    _handlers: Dict[str, Type[BaseHandler]] = {}
+    _handlers: dict[str, type[BaseHandler]] = {}
     _initialized: bool = False
 
     @classmethod
-    def register(cls, name: str, handler_class: Type[BaseHandler]):
+    def register(cls, name: str, handler_class: type[BaseHandler]):
         """Register a handler with a given name.
 
         Args:
@@ -35,7 +34,7 @@ class HandlerRegistry:
         handler_name: str,
         url: str,
         config: Config,
-    ) -> Optional[BaseHandler]:
+    ) -> BaseHandler | None:
         """Get handler by name.
 
         Args:
@@ -68,7 +67,7 @@ class HandlerRegistry:
 
         try:
             # Import all handler modules to trigger their registration
-            from pybookget.handlers import (
+            from pybookget.handlers import (  # noqa: F401 - imported for their registration
                 erara,
                 iiif,
                 # Additional site-specific handlers can be imported here
@@ -103,7 +102,7 @@ def register_handler(name: str):
     Args:
         name: Handler name to register (e.g., "iiif", "custom")
     """
-    def decorator(handler_class: Type[BaseHandler]):
+    def decorator(handler_class: type[BaseHandler]):
         HandlerRegistry.register(name, handler_class)
         return handler_class
     return decorator
@@ -111,9 +110,9 @@ def register_handler(name: str):
 
 async def download_from_url(
     url: str,
-    config: Optional[Config] = None,
+    config: Config | None = None,
     handler: str = "iiif",
-) -> Optional[Dict]:
+) -> dict | None:
     """Download from URL using specified handler.
 
     This is the main entry point for library usage.

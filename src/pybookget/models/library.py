@@ -9,7 +9,6 @@ Metadata follows Dublin Core standard with required fields: creator, title, date
 """
 
 from dataclasses import dataclass, field
-from typing import Optional, List
 
 
 @dataclass
@@ -43,18 +42,18 @@ class LibraryMetadata:
     date: str     # dc:date (publication date)
 
     # Optional fields (Dublin Core)
-    contributor: Optional[str] = None      # dc:contributor
-    publisher: Optional[str] = None        # dc:publisher
-    type: Optional[str] = None             # dc:type
-    format: Optional[str] = None           # dc:format
-    identifier: Optional[str] = None       # dc:identifier
-    source: Optional[str] = None           # dc:source
-    language: Optional[str] = None         # dc:language
-    relation: Optional[str] = None         # dc:relation
-    coverage: Optional[str] = None         # dc:coverage
-    rights: Optional[str] = None           # dc:rights (license)
-    description: Optional[str] = None      # dc:description
-    subject: Optional[List[str]] = None    # dc:subject
+    contributor: str | None = None      # dc:contributor
+    publisher: str | None = None        # dc:publisher
+    type: str | None = None             # dc:type
+    format: str | None = None           # dc:format
+    identifier: str | None = None       # dc:identifier
+    source: str | None = None           # dc:source
+    language: str | None = None         # dc:language
+    relation: str | None = None         # dc:relation
+    coverage: str | None = None         # dc:coverage
+    rights: str | None = None           # dc:rights (license)
+    description: str | None = None      # dc:description
+    subject: list[str] | None = None    # dc:subject
 
 
 @dataclass
@@ -74,15 +73,15 @@ class LibraryPage:
     """
     order: int
     label: str
-    page_id: Optional[str] = None
+    page_id: str | None = None
 
     # Image URLs
-    image_url: Optional[str] = None
-    image_fallback_url: Optional[str] = None
+    image_url: str | None = None
+    image_fallback_url: str | None = None
 
     # OCR URLs
-    alto_url: Optional[str] = None
-    plain_text_url: Optional[str] = None
+    alto_url: str | None = None
+    plain_text_url: str | None = None
 
 
 @dataclass
@@ -113,8 +112,8 @@ class LibraryBook:
 
     def get_pages_in_range(
         self,
-        start: Optional[int] = None,
-        end: Optional[int] = None
+        start: int | None = None,
+        end: int | None = None
     ) -> list[LibraryPage]:
         """Filter pages by range.
 

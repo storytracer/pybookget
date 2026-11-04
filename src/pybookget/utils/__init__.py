@@ -12,8 +12,8 @@ from pybookget.utils.text import (
 
 __all__ = [
     "ensure_dir",
-    "get_file_extension",
     "extract_between",
     "get_domain",
+    "get_file_extension",
     "parse_url_pattern",
 ]

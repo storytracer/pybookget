@@ -11,7 +11,6 @@ This handler extends the LibraryHandler to support e-rara.ch's features:
 import json
 import logging
 import re
-from typing import Optional
 
 from pybookget.config import Config
 from pybookget.formats.iiif import IIIFParser
@@ -19,7 +18,6 @@ from pybookget.formats.mets import METSParser
 from pybookget.handlers.iiif import IIIFHandler
 from pybookget.handlers.library import LibraryHandler
 from pybookget.models.erara import (
-    ERaraBook,
     add_iiif_urls_to_book,
     create_erara_book_from_mets,
 )
@@ -132,7 +130,7 @@ class ERaraHandler(LibraryHandler):
         except Exception as e:
             logger.error(f"Failed to save library metadata files: {e}")
 
-    def _extract_erara_id(self) -> Optional[str]:
+    def _extract_erara_id(self) -> str | None:
         """Extract e-rara book ID from URL.
 
         Supports multiple URL formats:
