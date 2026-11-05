@@ -158,6 +158,42 @@ Manifests also carry `rights` (v2 `license`, v3 `rights`) and
 `required_statement` (v2 `attribution`, v3 `requiredStatement`), and
 `pybookget.models.iiif.label_text()` reads any IIIF label shape.
 
+### Manifests (IIIF and METS)
+
+`pybookget.formats.manifest` reads an item's pages from a IIIF Presentation manifest (v2 or v3)
+or a METS document with MODS (plain, or in an OAI-PMH `GetRecord` response), with the core
+install only. `read_manifest()` detects the format (`detect_format()`, or pass `format="iiif"` /
+`"mets"`) and returns a `ManifestItem`: `format`, `id`, `label`, `rights`,
+`required_statement`, `identifiers`, `metadata` and `pages`, a `ManifestPage` per page with an
+image (`index`, `id`, `label`, `url`, `fallback_url`, `ocr_url`, `ocr_format`).
+
+```python
+import asyncio
+from pybookget.config import Config
+from pybookget.formats.manifest import read_manifest
+from pybookget.http import create_client, fetch
+
+async def pages(url):
+    config = Config()
+    async with create_client(config) as client:
+        item = read_manifest((await fetch(client, url, config)).content, config)
+        print(item.format, item.id, item.label, item.rights)
+        for page in item.pages:  # existing OCR: page.ocr_url, page.ocr_format ("alto"/"hocr")
+            print(page.index, page.label, page.url, page.fallback_url, page.ocr_url)
+
+asyncio.run(pages("https://library.example.org/oai?verb=GetRecord&metadataPrefix=mets&identifier=oai:example:1234"))
+```
+
+- **IIIF**: the pages and URLs of `canvas_images()`; OCR from a canvas's `seeAlso` or
+  `rendering` whose `format` or `profile` names ALTO or hOCR (ALTO preferred); `metadata` holds
+  the manifest's metadata pairs.
+- **METS**: the `TYPE="page"` divs of the physical structMap, by `ORDER`; the image is the
+  page's file in the first of `Config.mets_image_groups` (`MAX`, `ORIGINAL`, `MASTER`,
+  `DEFAULT`) that has one, then any other group of `image/*` files except thumbnails, and the
+  fallback its file in the next group; OCR from the `FULLTEXT`, `ALTO` or `OCR` group
+  (`Config.mets_ocr_groups`). Title, names, dates, identifiers and rights come from the MODS
+  record the logical structMap points to; hrefs are kept as given.
+
 ### Direct httpx Usage
 
 For custom implementations, use httpx directly:

@@ -31,7 +31,8 @@ uv add <package>
 ```
 
 The core dependencies (httpx, h2, tenacity, pyrate-limiter, tqdm, fake-useragent) cover the IIIF
-parser (`formats/iiif.py`, `models/iiif.py`) and the HTTP layer (`http/`), which other projects
+and METS parsers (`formats/iiif.py`, `formats/mets.py`, `models/iiif.py`, `models/mets.py`), the
+manifest API (`formats/manifest.py`) and the HTTP layer (`http/`), which other projects
 (linecaster) use as a library. The CLI and the handlers need the `[cli]` extra (click, url64,
 tldextract, rocrate); `pybookget.download_from_url` is imported lazily so `import pybookget` works
 without it. The dev group installs `pybookget[cli]`. Keep handler-only dependencies out of the core.
@@ -95,15 +96,20 @@ pybookget/                 # Git repository root
 ├── pyproject.toml         # Package configuration (uv_build, dependency groups)
 ├── uv.lock                # Locked dependencies (uv)
 ├── .python-version        # 3.12
-├── tests/                 # pytest suite (test_ratelimit.py, test_download.py, test_iiif.py, test_proxy.py)
+├── tests/                 # pytest suite (test_ratelimit.py, test_download.py, test_iiif.py, test_manifest.py, test_proxy.py)
 └── src/                   # Source code (src layout)
     └── pybookget/         # Python package
         ├── __init__.py        # Package exports
         ├── __main__.py        # Entry point for python -m pybookget
         ├── config.py          # Configuration management (Config class)
         ├── cli.py             # Click-based CLI interface
+        ├── formats/           # Format parsers
+        │   ├── iiif.py        # IIIF parser, canvas_images(), image_url()
+        │   ├── mets.py        # METS/MODS parser (METSParser)
+        │   └── manifest.py    # read_manifest(): IIIF or METS as ManifestItem/ManifestPage
         ├── models/            # Data models
-        │   └── iiif.py        # IIIF manifest parsing (v2 & v3)
+        │   ├── iiif.py        # IIIF manifest parsing (v2 & v3)
+        │   └── mets.py        # METS document, pages, files, MODS metadata
         ├── http/              # HTTP utilities (async-only)
         │   ├── client.py      # httpx AsyncClient factory
         │   ├── download.py    # Async download manager with fallback support
@@ -129,6 +135,8 @@ Central configuration class with:
 - Concurrency settings (threads, concurrent tasks)
 - HTTP settings (timeout, user agent, proxy, SSL)
 - **IIIF Image API parameters** (quality, format, region, rotation)
+- **METS file groups**: `mets_image_groups` (image priority, default `MAX`, `ORIGINAL`,
+  `MASTER`, `DEFAULT`) and `mets_ocr_groups` (`FULLTEXT`, `ALTO`, `OCR`)
 - Retry configuration (tenacity integration)
 - Rate limiting
 
@@ -200,13 +208,32 @@ creates no folders; handlers create theirs in `get_save_dir()`.
 - `client.wait_retry_after_or_exponential`: waits the backoff or the server's `Retry-After`
   (seconds or HTTP-date), whichever is longer, capped at `Config.retry_after_max` (300 s)
 
-#### 6. **Models** (`src/pybookget/models/iiif.py`)
+#### 6. **Manifests** (`src/pybookget/formats/manifest.py`)
+The format-independent API linecaster uses (core install only):
+- `detect_format(data)`: `"iiif"` (JSON/dict with a IIIF Presentation context, type Manifest
+  or sequences) or `"mets"` (XML with a mets:mets root, or an OAI-PMH response with exactly one
+  METS record); `ValueError` otherwise
+- `read_manifest(data, config, format=None)`: a `ManifestItem(format, id, label, rights,
+  required_statement, identifiers, metadata, pages)`; `pages` are `ManifestPage(index, id,
+  label, url, fallback_url, ocr_url, ocr_format)` for the pages with an image, `index` from 1
+- IIIF: `canvas_images()` plus OCR links from the canvas's `seeAlso`/`rendering`
+  (`IIIFCanvas.see_also`, `IIIFCanvas.rendering`); ALTO before hOCR
+- METS: `METSParser.parse_element()`; physical page divs (TYPE "page", any case) sorted by
+  `ORDER` when every page has one; file pointers from `fptr/@FILEID` and `fptr//area/@FILEID`;
+  image = the page's file in the first group of `Config.mets_image_groups` that has one, then
+  other `image/*` groups (never `THUMBS`, `MIN`, `LOCAL`, ...), fallback = the next group's;
+  MODS from the dmdSec of the first logical div with a DMDID; the digitisation's originInfo is
+  skipped; `required_statement` is the DFG-viewer `dv:owner`
+
+#### 7. **Models** (`src/pybookget/models/iiif.py`, `src/pybookget/models/mets.py`)
 Data models for IIIF manifests:
 - `IIIFManifest`: Top-level manifest (v2/v3)
 - `IIIFCanvas`: Canvas/page representation
 - `IIIFImage`: Image with service info
 - `IIIFService`: IIIF Image API service
 - `parse_iiif_manifest()`: Parser supporting both v2 and v3
+- `METSDocument` (pages in reading order, files by ID, file groups, OBJID, dv:owner/dv:license),
+  `METSPage`, `METSFile`, `METSMetadata` (MODS, with `METSName` names and roles)
 
 ### Handler Flow
 
@@ -468,7 +495,9 @@ Key dependencies (see `pyproject.toml`):
 proxies, repeated event loops, DownloadManager). `tests/test_download.py` covers the download
 manager and `download_file` (streaming, per-task results, retry policy, Retry-After, atomic
 writes, defaults). `tests/test_iiif.py` covers manifest parsing (v2/v3, labels, rights), page
-image URLs and `fetch` (retries, fallback on 404); `tests/test_proxy.py` the proxy settings. Still to be added:
+image URLs and `fetch` (retries, fallback on 404); `tests/test_manifest.py` the manifest API
+(DFG METS with MODS, OAI-PMH wrapping, image group priority, IIIF v2/v3 OCR links, format
+detection); `tests/test_proxy.py` the proxy settings. Still to be added:
 - Integration tests for download manager
 - Mock-based tests for handlers
 - CLI tests with Click's testing utilities

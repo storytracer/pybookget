@@ -65,6 +65,12 @@ class Config:
     iiif_region: str = "full"  # IIIF region parameter (usually 'full')
     iiif_rotation: str = "0"  # IIIF rotation parameter (usually '0')
 
+    # METS file groups (fileGrp USE), by priority: a page's image is its file in the first of
+    # these groups that has one, the fallback its file in the next (then any other group of
+    # image/* files except thumbnails); OCR is its file in the first OCR group
+    mets_image_groups: tuple[str, ...] = ("MAX", "ORIGINAL", "MASTER", "DEFAULT")
+    mets_ocr_groups: tuple[str, ...] = ("FULLTEXT", "ALTO", "OCR")
+
     # Rate limiting
     sleep_interval: int = 0  # Seconds between downloads
     # Request rate limits shared by every HTTP client created from this config, as

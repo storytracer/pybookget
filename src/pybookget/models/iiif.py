@@ -32,6 +32,14 @@ def label_text(value: Any) -> str | None:
     return None
 
 
+def _entries(value: Any) -> list[dict[str, Any]]:
+    """A IIIF property that may be one entry or a list of them, as a list of dicts."""
+    if value is None:
+        return []
+    entries = value if isinstance(value, list) else [value]
+    return [e if isinstance(e, dict) else {"id": e} for e in entries if isinstance(e, dict | str)]
+
+
 @dataclass
 class IIIFService:
     """IIIF Image Service information."""
@@ -94,6 +102,10 @@ class IIIFCanvas:
     width: int | None = None
     height: int | None = None
     images: list[IIIFImage] = field(default_factory=list)
+    # The canvas's "seeAlso" and "rendering" entries as given (a string becomes {"id": ...}),
+    # e.g. links to the page's OCR (ALTO, hOCR)
+    see_also: list[dict[str, Any]] = field(default_factory=list)
+    rendering: list[dict[str, Any]] = field(default_factory=list)
 
     @classmethod
     def from_dict_v2(cls, data: dict[str, Any]) -> "IIIFCanvas":
@@ -110,6 +122,8 @@ class IIIFCanvas:
             width=data.get('width'),
             height=data.get('height'),
             images=images,
+            see_also=_entries(data.get('seeAlso')),
+            rendering=_entries(data.get('rendering')),
         )
 
     @classmethod
@@ -129,6 +143,8 @@ class IIIFCanvas:
             width=data.get('width'),
             height=data.get('height'),
             images=images,
+            see_also=_entries(data.get('seeAlso')),
+            rendering=_entries(data.get('rendering')),
         )
 
 
