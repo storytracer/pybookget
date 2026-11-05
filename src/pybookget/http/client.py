@@ -97,6 +97,7 @@ def create_client(
         follow_redirects=True,
         http2=True,
         proxy=config.proxy,
+        trust_env=config.trust_env,
         limits=httpx.Limits(max_keepalive_connections=config.max_keepalive_connections),
         event_hooks=event_hooks,
         transport=transport,

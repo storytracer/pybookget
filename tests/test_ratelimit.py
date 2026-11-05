@@ -27,10 +27,8 @@ def ok_transport(calls=None):
 
 
 def make_config(tmp_path, **kwargs) -> Config:
-    kwargs.setdefault("proxy", None)
-    config = Config(download_dir=str(tmp_path), show_progress=False, **kwargs)
-    config.proxy = kwargs["proxy"]  # ignore HTTPS_PROXY/HTTP_PROXY from the test environment
-    return config
+    kwargs.setdefault("trust_env", False)  # ignore the test environment's proxy settings
+    return Config(download_dir=str(tmp_path), show_progress=False, **kwargs)
 
 
 # --- parsing and validation -------------------------------------------------------------

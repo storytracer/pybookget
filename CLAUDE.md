@@ -95,7 +95,7 @@ pybookget/                 # Git repository root
 ├── pyproject.toml         # Package configuration (uv_build, dependency groups)
 ├── uv.lock                # Locked dependencies (uv)
 ├── .python-version        # 3.12
-├── tests/                 # pytest suite (test_ratelimit.py, test_download.py, test_iiif.py)
+├── tests/                 # pytest suite (test_ratelimit.py, test_download.py, test_iiif.py, test_proxy.py)
 └── src/                   # Source code (src layout)
     └── pybookget/         # Python package
         ├── __init__.py        # Package exports
@@ -280,7 +280,8 @@ config = Config(
     # HTTP settings
     timeout=300,                  # Request timeout (seconds)
     user_agent="...",             # Custom user agent
-    proxy="http://...",           # HTTP/HTTPS proxy
+    proxy="http://...",           # proxy for every request; None = the environment's
+    trust_env=True,               # environment proxy settings (HTTP(S)_PROXY, ALL_PROXY, NO_PROXY)
     verify_ssl=True,              # TLS verification (default True)
 
     # Retry configuration (tenacity)
@@ -305,6 +306,14 @@ config = Config(
     show_progress=True,           # Progress bars
 )
 ```
+
+### Proxies
+
+`Config` does not read proxy variables itself: with `proxy=None` httpx applies the environment's
+settings (`trust_env=True`: upper- and lower-case `HTTPS_PROXY`/`HTTP_PROXY`/`ALL_PROXY`, and
+`NO_PROXY`). An explicit `proxy` overrides them for every request; `trust_env=False` ignores the
+environment. Tests build their Config with `trust_env=False` (or run against a loopback server
+with a dead proxy port, `tests/test_proxy.py`).
 
 ### Rate limiting
 
@@ -459,7 +468,7 @@ Key dependencies (see `pyproject.toml`):
 proxies, repeated event loops, DownloadManager). `tests/test_download.py` covers the download
 manager and `download_file` (streaming, per-task results, retry policy, Retry-After, atomic
 writes, defaults). `tests/test_iiif.py` covers manifest parsing (v2/v3, labels, rights), page
-image URLs and `fetch` (retries, fallback on 404). Still to be added:
+image URLs and `fetch` (retries, fallback on 404); `tests/test_proxy.py` the proxy settings. Still to be added:
 - Integration tests for download manager
 - Mock-based tests for handlers
 - CLI tests with Click's testing utilities

@@ -1,6 +1,5 @@
 """Configuration management for pybookget."""
 
-import os
 import weakref
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -38,7 +37,11 @@ class Config:
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
         "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     )
+    # An explicit proxy for every request. None: the environment's proxy settings apply as httpx
+    # reads them (HTTPS_PROXY, HTTP_PROXY, ALL_PROXY, upper or lower case, and NO_PROXY), if trust_env
     proxy: str | None = None
+    # Read proxy settings (and SSL_CERT_FILE, .netrc) from the environment, as httpx does; False ignores them
+    trust_env: bool = True
     verify_ssl: bool = True  # Verify TLS certificates (disable with --no-ssl-verify)
     # Idle connections kept open for reuse; 0 opens a new connection for every request.
     # Keeping some (e.g. 16) saves a TLS handshake per file in bulk downloads from one server.
@@ -100,10 +103,6 @@ class Config:
         # Parse volume range if provided
         if self.volume_range:
             self._parse_volume_range()
-
-        # Setup proxy from environment if not specified
-        if not self.proxy:
-            self.proxy = os.environ.get('HTTPS_PROXY') or os.environ.get('HTTP_PROXY')
 
     def _parse_page_range(self) -> None:
         """Parse page range from format '4:434' to start and end integers."""

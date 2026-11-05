@@ -230,7 +230,7 @@ For libraries with custom APIs or non-IIIF formats, you can easily add custom ha
 --timeout             Request timeout in seconds (default: 300)
 --cookie-file         Path to cookie file (Netscape format)
 --header-file         Path to header file
---proxy               HTTP/HTTPS proxy
+--proxy               HTTP/HTTPS proxy for every request (default: the environment's, see Proxies)
 --user-agent, -U      Custom user agent
 --no-ssl-verify       Disable SSL verification
 --quality             JPEG quality 1-100 (default: 80)
@@ -265,7 +265,8 @@ config = Config(
 
     cookie_file="cookies.txt",        # Cookie file path
     header_file="headers.txt",        # Header file path
-    proxy="http://proxy:8080",        # Proxy URL
+    proxy="http://proxy:8080",        # Proxy for every request (default None: the environment's)
+    trust_env=True,                   # Read proxy settings from the environment (default True)
     verify_ssl=True,                  # TLS certificate verification (default True)
     max_keepalive_connections=0,      # 0 = a new connection per request; keep some for bulk runs
     quality=80,                       # JPEG quality
@@ -457,6 +458,15 @@ https://iiif.example.org/image123/full/max/0/default.jpg
 # Full size, grayscale PNG (v3)
 https://iiif.example.org/image123/full/max/0/gray.png
 ```
+
+## Proxies
+
+By default the environment's proxy settings apply, as httpx reads them:
+`HTTPS_PROXY`, `HTTP_PROXY` and `ALL_PROXY` (upper or lower case), with
+`NO_PROXY` naming the hosts that are reached directly. An HTTPS proxy is used
+for `https://` URLs only. `proxy=` (`--proxy`) sends every request through one
+proxy instead; `trust_env=False` ignores the environment (no proxy, no
+`SSL_CERT_FILE`, no `.netrc`).
 
 ## Authentication
 

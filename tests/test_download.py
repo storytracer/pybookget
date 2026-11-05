@@ -18,9 +18,8 @@ from pybookget.http.download import DownloadManager, DownloadTask
 def make_config(tmp_path, **kwargs) -> Config:
     kwargs.setdefault("retry_wait_min", 0)
     kwargs.setdefault("retry_wait_max", 0)
-    config = Config(download_dir=str(tmp_path), show_progress=False, **kwargs)
-    config.proxy = None  # ignore HTTPS_PROXY/HTTP_PROXY from the test environment
-    return config
+    kwargs.setdefault("trust_env", False)  # ignore the test environment's proxy settings
+    return Config(download_dir=str(tmp_path), show_progress=False, **kwargs)
 
 
 def use_transport(monkeypatch, handler):

@@ -45,9 +45,7 @@ V3 = {
 
 
 def config(**kwargs) -> Config:
-    c = Config(retry_wait_min=0, retry_wait_max=0, **kwargs)
-    c.proxy = None
-    return c
+    return Config(retry_wait_min=0, retry_wait_max=0, trust_env=False, **kwargs)
 
 
 def test_v2_canvas_images_with_fallbacks_and_numbering():
