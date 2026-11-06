@@ -106,7 +106,7 @@ pybookget/                 # Git repository root
         ├── formats/           # Format parsers
         │   ├── iiif.py        # IIIF parser, canvas_images(), image_url()
         │   ├── mets.py        # METS/MODS parser (METSParser)
-        │   └── manifest.py    # read_manifest(): IIIF or METS as ManifestItem/ManifestPage
+        │   └── manifest.py    # read_manifest(): IIIF or METS as ManifestItem/ManifestPage; read_collection()
         ├── models/            # Data models
         │   ├── iiif.py        # IIIF manifest parsing (v2 & v3)
         │   └── mets.py        # METS document, pages, files, MODS metadata
@@ -211,8 +211,14 @@ creates no folders; handlers create theirs in `get_save_dir()`.
 #### 6. **Manifests** (`src/pybookget/formats/manifest.py`)
 The format-independent API linecaster uses (core install only):
 - `detect_format(data)`: `"iiif"` (JSON/dict with a IIIF Presentation context, type Manifest
-  or sequences) or `"mets"` (XML with a mets:mets root, or an OAI-PMH response with exactly one
-  METS record); `ValueError` otherwise
+  or sequences), `"iiif-collection"` (type Collection / sc:Collection) or `"mets"` (XML with a
+  mets:mets root, or an OAI-PMH response with exactly one METS record); `ValueError` otherwise
+- `read_collection(data)`: one level of a IIIF Collection (v2 or v3) as `CollectionEntry(id,
+  label, kind)`, kind `"manifest"` or `"collection"` (a listed collection, read in turn by the
+  caller), in order: v3 `items`; v2 `members`, else `collections` then `manifests` (bare URIs
+  too). A skeleton: paged collections (`first`/`next`) and collections embedding a nested
+  collection's members raise `NotImplementedError` (xfail tests); `read_manifest` refuses a
+  collection with a `ValueError` naming `read_collection`
 - `read_manifest(data, config, format=None)`: a `ManifestItem(format, id, label, rights,
   required_statement, identifiers, metadata, pages)`; `pages` are `ManifestPage(index, id,
   label, url, fallback_url, ocr_url, ocr_format)` for the pages with an image, `index` from 1
@@ -497,7 +503,7 @@ manager and `download_file` (streaming, per-task results, retry policy, Retry-Af
 writes, defaults). `tests/test_iiif.py` covers manifest parsing (v2/v3, labels, rights), page
 image URLs and `fetch` (retries, fallback on 404); `tests/test_manifest.py` the manifest API
 (DFG METS with MODS, OAI-PMH wrapping, image group priority, IIIF v2/v3 OCR links, format
-detection); `tests/test_proxy.py` the proxy settings. Still to be added:
+detection, collections); `tests/test_proxy.py` the proxy settings. Still to be added:
 - Integration tests for download manager
 - Mock-based tests for handlers
 - CLI tests with Click's testing utilities

@@ -8,6 +8,11 @@ METS documents with MODS (see ``formats/mets.py``), plain or in an OAI-PMH respo
     >>> item = read_manifest(response.content, Config())
     >>> [(page.index, page.url, page.ocr_url) for page in item.pages]
 
+A IIIF Collection lists manifests (and other collections); ``read_collection()`` returns one level
+of it, a ``CollectionEntry`` per member:
+
+    >>> [(entry.kind, entry.id) for entry in read_collection(response.content)]
+
 Only the core install is needed (no CLI dependencies).
 """
 
@@ -23,7 +28,7 @@ from pybookget.formats.mets import METSParser
 from pybookget.models.iiif import IIIFCanvas, label_text
 from pybookget.models.mets import METS_NAMESPACES, METSDocument, METSFile, METSPage
 
-__all__ = ["ManifestItem", "ManifestPage", "detect_format", "read_manifest"]
+__all__ = ["CollectionEntry", "ManifestItem", "ManifestPage", "detect_format", "read_collection", "read_manifest"]
 
 METS_ROOT = f"{{{METS_NAMESPACES['mets']}}}mets"
 
@@ -76,10 +81,21 @@ class ManifestItem:
     pages: list[ManifestPage] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class CollectionEntry:
+    """One member of a IIIF Collection: its ``id`` (the URL to read it from), its ``label``, and
+    its ``kind``, "manifest" or "collection" (a collection listed in the collection)."""
+
+    id: str
+    label: str | None
+    kind: str
+
+
 def detect_format(data: bytes | str | dict) -> str:
-    """The format of a manifest: "iiif" or "mets".
+    """The format of a manifest: "iiif", "mets", or "iiif-collection" for a IIIF Collection.
 
     "iiif" for JSON (or a dict) with a IIIF Presentation context, type Manifest or sequences;
+    "iiif-collection" for JSON of type Collection (v3) or sc:Collection (v2);
     "mets" for XML whose root is mets:mets, or an OAI-PMH response with a mets:mets record.
 
     Raises:
@@ -96,6 +112,8 @@ def read_manifest(data: bytes | str | dict, config: Config, format: str | None =
     """
     loaded = _load(data)
     format = format or _detect(loaded)
+    if format == "iiif-collection":
+        raise ValueError("A IIIF Collection, not a manifest: read its members with read_collection()")
     if format == "iiif":
         if not isinstance(loaded, dict):
             raise ValueError("A IIIF manifest must be a JSON object")
@@ -136,8 +154,52 @@ def _load(data: bytes | str | dict) -> dict | list | ET.Element:
     raise ValueError("Neither JSON nor XML")
 
 
+def read_collection(data: bytes | str | dict) -> list[CollectionEntry]:
+    """The members of a IIIF Collection (v2 or v3), one level, in their order: the manifests and
+    the collections it lists (v3 ``items``; v2 ``members``, else ``collections`` then
+    ``manifests``). A listed collection is an entry of kind "collection"; its members are read by
+    reading it in turn.
+
+    Raises:
+        ValueError: If the data is not a IIIF Collection, or a member has no id
+        NotImplementedError: For a paged collection (``first``/``next``) or a collection that
+            embeds a nested collection's members, neither read yet
+    """
+    loaded = _load(data)
+    if not isinstance(loaded, dict) or _detect(loaded) != "iiif-collection":
+        raise ValueError("Not a IIIF Collection")
+    if any(key in loaded for key in ("first", "next")):
+        raise NotImplementedError("Paged IIIF Collections (first/next) are not read yet; read each page "
+                                  "as a collection of its own")
+    if "items" in loaded:
+        members = [(m, None) for m in loaded["items"] or []]
+    elif "members" in loaded:
+        members = [(m, None) for m in loaded["members"] or []]
+    else:
+        members = [*((m, "collection") for m in loaded.get("collections") or []),
+                   *((m, "manifest") for m in loaded.get("manifests") or [])]
+    entries = []
+    for member, listed_as in members:
+        if isinstance(member, str):      # v2 allows bare URIs in collections and manifests
+            member = {"@id": member}
+        if not isinstance(member, dict):
+            continue
+        entry_id = member.get("id") or member.get("@id")
+        if not entry_id:
+            raise ValueError(f"A IIIF Collection member without an id: {member!r}"[:200])
+        kind = listed_as or ("collection" if (member.get("type") or member.get("@type"))
+                             in ("Collection", "sc:Collection") else "manifest")
+        if kind == "collection" and any(k in member for k in ("items", "members", "collections", "manifests")):
+            raise NotImplementedError(f"The IIIF Collection embeds the members of a nested collection "
+                                      f"({entry_id}); nested collections are not read yet")
+        entries.append(CollectionEntry(str(entry_id), label_text(member.get("label")), kind))
+    return entries
+
+
 def _detect(loaded: dict | list | ET.Element) -> str:
     if isinstance(loaded, dict):
+        if (loaded.get("type") or loaded.get("@type")) in ("Collection", "sc:Collection"):
+            return "iiif-collection"
         context = loaded.get("@context") or loaded.get("context") or ""
         contexts = context if isinstance(context, list) else [context]
         if (

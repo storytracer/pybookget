@@ -363,3 +363,64 @@ def test_iiif_v3_alto_see_also_preferred_over_hocr():
         {"id": "https://example.org/b2/1.alto.xml", "type": "Dataset", "format": "application/alto+xml"})
     page = read_manifest(data, config()).pages[0]
     assert (page.ocr_url, page.ocr_format) == ("https://example.org/b2/1.alto.xml", "alto")
+
+
+# --- read_collection ------------------------------------------------------------------------
+
+COLLECTION_V3 = {
+    "@context": "http://iiif.io/api/presentation/3/context.json",
+    "id": "https://lib.example/iiif/collection/flora",
+    "type": "Collection",
+    "label": {"en": ["Flora"]},
+    "items": [
+        {"id": "https://lib.example/iiif/b1/manifest", "type": "Manifest", "label": {"en": ["Volume 1"]}},
+        {"id": "https://lib.example/iiif/b2/manifest", "type": "Manifest", "label": {"none": ["Band 2"]}},
+        {"id": "https://lib.example/iiif/collection/fauna", "type": "Collection", "label": {"en": ["Fauna"]}},
+    ],
+}
+
+COLLECTION_V2 = {
+    "@context": "http://iiif.io/api/presentation/2/context.json",
+    "@id": "https://lib.example/iiif/collection/top",
+    "@type": "sc:Collection",
+    "label": "Top",
+    "collections": [{"@id": "https://lib.example/iiif/collection/sub", "@type": "sc:Collection", "label": "Sub"}],
+    "manifests": [{"@id": "https://lib.example/iiif/b3/manifest", "@type": "sc:Manifest", "label": "Volume 3"},
+                  "https://lib.example/iiif/b4/manifest"],
+}
+
+
+def test_read_collection_v3_and_v2():
+    from pybookget.formats.manifest import CollectionEntry, read_collection
+
+    assert detect_format(COLLECTION_V3) == detect_format(COLLECTION_V2) == "iiif-collection"
+    assert read_collection(json.dumps(COLLECTION_V3).encode()) == [
+        CollectionEntry("https://lib.example/iiif/b1/manifest", "Volume 1", "manifest"),
+        CollectionEntry("https://lib.example/iiif/b2/manifest", "Band 2", "manifest"),
+        CollectionEntry("https://lib.example/iiif/collection/fauna", "Fauna", "collection"),
+    ]
+    assert [(e.kind, e.id, e.label) for e in read_collection(COLLECTION_V2)] == [
+        ("collection", "https://lib.example/iiif/collection/sub", "Sub"),
+        ("manifest", "https://lib.example/iiif/b3/manifest", "Volume 3"),
+        ("manifest", "https://lib.example/iiif/b4/manifest", None),
+    ]
+    with pytest.raises(ValueError, match="read_collection"):
+        read_manifest(COLLECTION_V3, config())
+    with pytest.raises(ValueError, match="Not a IIIF Collection"):
+        read_collection(IIIF_V3)
+
+
+@pytest.mark.xfail(raises=NotImplementedError, strict=True, reason="paged collections are not read yet")
+def test_read_collection_follows_pages():
+    from pybookget.formats.manifest import read_collection
+
+    paged = {**COLLECTION_V2, "first": "https://lib.example/iiif/collection/top?page=1", "total": 2}
+    assert len(read_collection(paged)) == 2
+
+
+@pytest.mark.xfail(raises=NotImplementedError, strict=True, reason="nested collections are not read yet")
+def test_read_collection_embedded_nested_collection():
+    from pybookget.formats.manifest import read_collection
+
+    nested = {**COLLECTION_V3, "items": [{**COLLECTION_V3["items"][2], "items": COLLECTION_V3["items"][:1]}]}
+    assert [e.kind for e in read_collection(nested)] == ["manifest"]

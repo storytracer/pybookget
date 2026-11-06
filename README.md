@@ -194,6 +194,21 @@ asyncio.run(pages("https://library.example.org/oai?verb=GetRecord&metadataPrefix
   (`Config.mets_ocr_groups`). Title, names, dates, identifiers and rights come from the MODS
   record the logical structMap points to; hrefs are kept as given.
 
+### IIIF Collections
+
+`read_collection()` lists one level of a IIIF Collection (v2 or v3) as `CollectionEntry`s
+(`id`, `label`, `kind`: `"manifest"` or `"collection"`); `detect_format()` returns
+`"iiif-collection"` for one. A listed collection is read by reading its id in turn. Paged
+collections (`first`/`next`) and collections that embed a nested collection's members are not
+read yet (`NotImplementedError`).
+
+```python
+from pybookget.formats.manifest import read_collection
+
+for entry in read_collection(collection_json):
+    print(entry.kind, entry.id, entry.label)
+```
+
 ### Direct httpx Usage
 
 For custom implementations, use httpx directly:
