@@ -53,6 +53,13 @@ class Config:
     retry_wait_max: float = 10.0  # Maximum wait between retries (seconds)
     retry_multiplier: float = 2.0  # Exponential backoff multiplier
     retry_after_max: float = 300.0  # Longest Retry-After (seconds) honoured from a 429/503
+    # The longest one attempt may take, from sending the request (after the rate limits) to its last byte,
+    # plus Content-Length / attempt_min_rate (bytes per second) when both are known. An attempt past it is
+    # cancelled and retried like a timeout, so a connection that trickles (a slow proxy exit) does not hold
+    # a download for minutes. None: only `timeout`, which httpx applies to each phase (connect, read, ...)
+    # and which a trickle never reaches.
+    attempt_timeout: float | None = None
+    attempt_min_rate: float | None = None
 
     # Download settings
     use_dzi: bool = True  # Use DeepZoom/IIIF tiles

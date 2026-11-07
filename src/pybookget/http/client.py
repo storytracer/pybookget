@@ -40,7 +40,13 @@ def create_client(
     """Create an async httpx client from configuration.
 
     If ``config.rate_limits`` is set, every request (including retries) first
-    waits on the limiter shared by all clients of this config.
+    waits on the limiter shared by all clients of this config. If
+    ``config.attempt_timeout`` is set, each attempt must be done within its
+    deadline (``attempt_deadline``), counted from when it is sent, after the
+    rate limits; the response body is then read in a response hook, so a
+    response is complete when ``client.get`` returns (no streaming). An attempt
+    past its deadline raises ``httpx.ReadTimeout``, which ``is_retryable``
+    retries.
 
     Args:
         config: Configuration object
@@ -87,6 +93,11 @@ def create_client(
 
         event_hooks["request"] = [_wait_for_rate_limit]
 
+    # A deadline per attempt, started after the rate limits (the hooks run in order)
+    if config.attempt_timeout is not None:
+        event_hooks.setdefault("request", []).append(_attempt_started(config))
+        event_hooks["response"] = [_attempt_finished(config)]
+
     # Create async client with configuration. By default connections are not kept
     # alive, so every request opens a new one (config.max_keepalive_connections)
     return httpx.AsyncClient(
@@ -102,6 +113,50 @@ def create_client(
         event_hooks=event_hooks,
         transport=transport,
     )
+
+
+_ATTEMPT_START = "pybookget.attempt_start"
+
+
+def attempt_deadline(config: Config, content_length: str | None) -> float:
+    """Seconds one attempt may take: ``config.attempt_timeout``, plus the
+    response's Content-Length divided by ``config.attempt_min_rate`` when both
+    are known (a large file gets the time it needs at that rate)."""
+    seconds = float(config.attempt_timeout)
+    if config.attempt_min_rate and content_length and content_length.isdigit():
+        seconds += int(content_length) / config.attempt_min_rate
+    return seconds
+
+
+def _attempt_started(config: Config):
+    async def hook(request: httpx.Request) -> None:
+        request.extensions[_ATTEMPT_START] = asyncio.get_running_loop().time()
+        # until the response's headers: no phase may take longer than the whole attempt
+        limit = float(config.attempt_timeout)
+        timeouts = dict(request.extensions.get("timeout") or {})
+        request.extensions["timeout"] = {
+            phase: limit if timeouts.get(phase) is None else min(timeouts[phase], limit)
+            for phase in ("connect", "read", "write", "pool")
+        }
+    return hook
+
+
+def _attempt_finished(config: Config):
+    async def hook(response: httpx.Response) -> None:
+        start = response.request.extensions.get(_ATTEMPT_START)
+        if start is None:
+            return
+        seconds = attempt_deadline(config, response.headers.get("Content-Length"))
+        remaining = start + seconds - asyncio.get_running_loop().time()
+        try:
+            async with asyncio.timeout(max(remaining, 0.0)):
+                await response.aread()
+        except TimeoutError:
+            await response.aclose()
+            raise httpx.ReadTimeout(
+                f"attempt took longer than its deadline ({seconds:.1f} s)", request=response.request
+            ) from None
+    return hook
 
 
 # HTTP statuses worth retrying: the server is busy, overloaded or briefly failing.

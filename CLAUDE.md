@@ -96,7 +96,7 @@ pybookget/                 # Git repository root
 ├── pyproject.toml         # Package configuration (uv_build, dependency groups)
 ├── uv.lock                # Locked dependencies (uv)
 ├── .python-version        # 3.12
-├── tests/                 # pytest suite (test_ratelimit.py, test_download.py, test_iiif.py, test_manifest.py, test_proxy.py)
+├── tests/                 # pytest suite (test_ratelimit.py, test_download.py, test_iiif.py, test_manifest.py, test_proxy.py, test_attempt_timeout.py)
 └── src/                   # Source code (src layout)
     └── pybookget/         # Python package
         ├── __init__.py        # Package exports
@@ -207,6 +207,12 @@ creates no folders; handlers create theirs in `get_save_dir()`.
   only; other 4xx (404, 403, ...) fail at once
 - `client.wait_retry_after_or_exponential`: waits the backoff or the server's `Retry-After`
   (seconds or HTTP-date), whichever is longer, capped at `Config.retry_after_max` (300 s)
+- A deadline per attempt (`Config.attempt_timeout`, default None; `attempt_min_rate` adds
+  Content-Length / rate, `client.attempt_deadline`): a request hook after the rate limits stamps
+  the start and caps httpx's per-phase timeouts at it, a response hook reads the body within what
+  is left and raises `httpx.ReadTimeout` past it, which is retried. httpx's own `timeout` applies
+  per phase, so a connection that trickles (a slow proxy exit) never reaches it; this cuts it.
+  With it set, responses are read in the hook (no streaming)
 
 #### 6. **Manifests** (`src/pybookget/formats/manifest.py`)
 The format-independent API linecaster uses (core install only):
@@ -503,7 +509,8 @@ manager and `download_file` (streaming, per-task results, retry policy, Retry-Af
 writes, defaults). `tests/test_iiif.py` covers manifest parsing (v2/v3, labels, rights), page
 image URLs and `fetch` (retries, fallback on 404); `tests/test_manifest.py` the manifest API
 (DFG METS with MODS, OAI-PMH wrapping, image group priority, IIIF v2/v3 OCR links, format
-detection, collections); `tests/test_proxy.py` the proxy settings. Still to be added:
+detection, collections); `tests/test_proxy.py` the proxy settings; `tests/test_attempt_timeout.py` the deadline per attempt (a trickling body
+or slow headers cut and retried, the rate limits' wait not counted). Still to be added:
 - Integration tests for download manager
 - Mock-based tests for handlers
 - CLI tests with Click's testing utilities

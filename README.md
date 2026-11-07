@@ -357,6 +357,11 @@ pybookget uses [tenacity](https://tenacity.readthedocs.io/) for robust retry man
 - **Configurable**: Adjust max retries, min/max wait times via config
 - **Smart**: Only retries errors that can go away (see below); a 404 fails at once
 - **Polite**: Honours the server's `Retry-After` header on 429/503 (up to `retry_after_max`, default 300 s)
+- **Deadline per attempt** (optional): `attempt_timeout` cuts an attempt that takes longer than that
+  (counted from when it is sent, after the rate limits) and retries it, so a connection that trickles
+  does not hold a download for minutes; `attempt_min_rate` (bytes per second) adds time for large
+  files by their Content-Length. `timeout` alone applies to each phase (connect, read, ...) and a
+  trickle never reaches it.
 
 ### Retry Configuration
 
@@ -366,6 +371,8 @@ config = Config(
     retry_wait_min=2.0,    # Start with 2 second wait
     retry_wait_max=60.0,   # Cap at 60 seconds
     retry_multiplier=3.0,  # Triple the wait each time (2s, 6s, 18s, 54s)
+    attempt_timeout=30,    # One attempt may take 30 s ...
+    attempt_min_rate=50_000,  # ... plus 1 s per 50 KB of Content-Length
 )
 ```
 
