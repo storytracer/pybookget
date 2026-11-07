@@ -159,9 +159,10 @@ def _attempt_finished(config: Config):
     return hook
 
 
-# HTTP statuses worth retrying: the server is busy, overloaded or briefly failing.
+# HTTP statuses worth retrying: the server is busy, overloaded or briefly failing, including
+# Cloudflare's 520-524 (its origin sent an unusable answer, refused, or timed out).
 # Every other 4xx (404, 403, ...) is final and fails immediately.
-RETRYABLE_STATUS_CODES = frozenset({408, 425, 429, 500, 502, 503, 504})
+RETRYABLE_STATUS_CODES = frozenset({408, 425, 429, 500, 502, 503, 504, 520, 521, 522, 523, 524})
 
 
 def is_retryable(exc: BaseException) -> bool:

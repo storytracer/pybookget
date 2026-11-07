@@ -389,7 +389,8 @@ pybookget download URL \
 ### What Gets Retried
 
 Retries are triggered for:
-- HTTP 408, 425, 429, 500, 502, 503 and 504 (busy, overloaded or briefly failing servers)
+- HTTP 408, 425, 429, 500, 502, 503 and 504 (busy, overloaded or briefly failing servers), and Cloudflare's 520-524
+  (the site behind Cloudflare sent an unusable answer, refused the connection or timed out)
 - `httpx.TransportError` - timeouts, connection and proxy errors, broken connections
 
 Other HTTP errors (404, 403, 410, ...) are final and are not retried; a 404 still

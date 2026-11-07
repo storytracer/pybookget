@@ -203,7 +203,8 @@ creates no folders; handlers create theirs in `get_save_dir()`.
 **Retry Logic:**
 - Uses tenacity library for exponential backoff
 - Configurable max retries, wait times, multiplier
-- `client.is_retryable`: retries `httpx.TransportError` and statuses 408/425/429/500/502/503/504
+- `client.is_retryable`: retries `httpx.TransportError` and statuses 408/425/429/500/502/503/504 and
+  Cloudflare's 520-524
   only; other 4xx (404, 403, ...) fail at once
 - `client.wait_retry_after_or_exponential`: waits the backoff or the server's `Retry-After`
   (seconds or HTTP-date), whichever is longer, capped at `Config.retry_after_max` (300 s)

@@ -173,7 +173,7 @@ def test_404_still_uses_the_fallback_url(tmp_path, monkeypatch):
     assert (tmp_path / "a.jpg").read_bytes() == b"fallback"
 
 
-@pytest.mark.parametrize("status", [429, 500, 502, 503, 504])
+@pytest.mark.parametrize("status", [429, 500, 502, 503, 504, 520, 524])
 def test_server_errors_are_retried(tmp_path, status):
     calls = []
 
