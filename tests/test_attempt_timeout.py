@@ -77,7 +77,20 @@ def test_attempts_that_always_trickle_fail_after_the_retries():
 
     with pytest.raises(httpx.ReadTimeout, match="deadline"):
         run(go())
-    assert len(calls) == 2
+    assert len(calls) == 3                                   # the first attempt and two retries
+
+
+def test_no_retries_is_a_single_attempt():
+    calls = []
+
+    async def go():
+        config = make_config(attempt_timeout=0.2, max_retries=0)
+        async with create_client(config, transport=trickling_transport(calls, slow_attempts=99)) as c:
+            await fetch(c, "https://example.org/a.jp2", config)
+
+    with pytest.raises(httpx.ReadTimeout, match="deadline"):
+        run(go())
+    assert len(calls) == 1
 
 
 def test_the_deadline_starts_after_the_rate_limits():

@@ -303,7 +303,7 @@ config = Config(
     timeout=300,                      # Timeout in seconds
 
     # Retry configuration (tenacity)
-    max_retries=3,                    # Maximum retry attempts
+    max_retries=3,                    # Retries after the first attempt (4 attempts)
     retry_wait_min=1.0,               # Min wait between retries (seconds)
     retry_wait_max=10.0,              # Max wait between retries (seconds)
     retry_multiplier=2.0,             # Exponential backoff multiplier
@@ -367,7 +367,7 @@ pybookget uses [tenacity](https://tenacity.readthedocs.io/) for robust retry man
 
 ```python
 config = Config(
-    max_retries=5,         # Try up to 5 times
+    max_retries=5,         # Retry up to 5 times (6 attempts)
     retry_wait_min=2.0,    # Start with 2 second wait
     retry_wait_max=60.0,   # Cap at 60 seconds
     retry_multiplier=3.0,  # Triple the wait each time (2s, 6s, 18s, 54s)

@@ -325,7 +325,7 @@ config = Config(
     verify_ssl=True,              # TLS verification (default True)
 
     # Retry configuration (tenacity)
-    max_retries=3,                # Max retry attempts
+    max_retries=3,                # Retries after the first attempt (4 attempts)
     retry_wait_min=1.0,           # Min wait between retries
     retry_wait_max=10.0,          # Max wait between retries
     retry_multiplier=2.0,         # Exponential backoff multiplier

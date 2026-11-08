@@ -48,7 +48,7 @@ class Config:
     max_keepalive_connections: int = 0
 
     # Retry settings (using tenacity)
-    max_retries: int = 3  # Maximum number of retry attempts
+    max_retries: int = 3  # Retries after the first attempt (max_retries + 1 attempts; 0: one attempt)
     retry_wait_min: float = 1.0  # Minimum wait between retries (seconds)
     retry_wait_max: float = 10.0  # Maximum wait between retries (seconds)
     retry_multiplier: float = 2.0  # Exponential backoff multiplier

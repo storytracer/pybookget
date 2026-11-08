@@ -223,7 +223,8 @@ def create_retry_decorator(config: Config):
     """Create a tenacity retry decorator from config.
 
     Retries only what ``is_retryable`` accepts, up to ``config.max_retries``
-    attempts, waiting with exponential backoff or the server's Retry-After.
+    retries (``max_retries + 1`` attempts; 0: a single attempt), waiting with
+    exponential backoff or the server's Retry-After.
 
     Args:
         config: Configuration object
@@ -232,7 +233,7 @@ def create_retry_decorator(config: Config):
         Configured retry decorator
     """
     return retry(
-        stop=stop_after_attempt(config.max_retries),
+        stop=stop_after_attempt(config.max_retries + 1),
         wait=wait_retry_after_or_exponential(config),
         retry=retry_if_exception(is_retryable),
         reraise=True,

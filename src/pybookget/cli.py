@@ -66,7 +66,7 @@ rate_limit_option = click.option(
 @click.option('--threads', '-t', default=1, help='Threads per download task')
 @click.option('--concurrent', '-c', default=16, help='Max concurrent tasks')
 @click.option('--timeout', default=300, help='Request timeout in seconds')
-@click.option('--max-retries', default=3, help='Maximum retry attempts')
+@click.option('--max-retries', default=3, help='Retries after the first attempt (0: one attempt)')
 @click.option('--retry-wait-min', default=1.0, help='Minimum wait between retries (seconds)')
 @click.option('--retry-wait-max', default=10.0, help='Maximum wait between retries (seconds)')
 @click.option('--cookie-file', help='Path to cookie file (Netscape format)')
